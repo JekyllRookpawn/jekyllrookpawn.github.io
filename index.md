@@ -1,6 +1,6 @@
 ---
-title: Welcome
-layout: home
+title: JekyllChess
+layout: default
 ---
 
-Hello, Jekyll!
+Hello, JekyllChess!
