@@ -10,4 +10,4 @@ exclude:
 plugins:
   - jekyll-remote-theme
 
-remote_theme: http[s]://github.<Enterprise>.com/benbalter/retlab
+remote_theme: https://github.com/henrythemes/hello-jekyll-theme
