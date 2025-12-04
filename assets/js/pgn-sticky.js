@@ -121,7 +121,7 @@
         inH = true;
       for (let L of lines) {
         let T = L.trim();
-        if (inH && T.startsWith("[") && T.endsendsWith("]")) H.push(L);
+        if (inH && T.startsWith("[") && T.endsWith("]")) H.push(L);
         else if (inH && T === "") inH = false;
         else {
           inH = false;
