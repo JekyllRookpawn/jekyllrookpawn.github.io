@@ -5,3 +5,7 @@
 /* Style for variations in games in posts */
 
 .pgn-variation,.pgn-comment{margin:.25rem 0;color:#666}.pgn-variation .pgn-move{color:#666!important}
+
+/* Style for the homepage */
+
+h1 img{height: 2em;}
