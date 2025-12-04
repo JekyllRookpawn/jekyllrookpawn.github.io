@@ -13,7 +13,7 @@ layout: default
       {{ post.title }}
     </a>
   </h1>
-  {{ post.content }}
+  {{ post.excerpt }}
 </article>
 
 {% endfor %}
