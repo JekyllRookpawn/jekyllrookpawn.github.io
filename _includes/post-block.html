@@ -1,11 +1,11 @@
 {% for post in site.posts %}
 
 <article>
-  <h2>
+  <h3>
     <a href="{{ site.path }}{{ post.url }}">
       {{ post.title }}
     </a>
-  </h2>
+  </h3>
   <fen>{{ post.FEN }}</fen>
   {{ post.excerpt }}
 </article>
