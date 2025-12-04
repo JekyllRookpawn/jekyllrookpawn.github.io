@@ -1,17 +1,18 @@
 // ============================================================================
 // pgn-sticky.js
-// Two-column sticky layout using the same parsing logic as pgn.js
-// - Accepts figurine input (♘f3, ♕xd5, …) by normalizing to SAN internally
-// - Header + board + buttons in left sticky column
-// - Moves / comments / variations in scrollable right column
-// - No [D] diagrams (only the sticky board)
+// Two-column sticky PGN renderer, mirroring pgn.js parsing behavior
+// - Header + board + buttons in sticky left column
+// - Moves/comments/variations in scrollable right column
+// - Same SAN / comment / variation handling as pgn.js
+// - [D] diagrams are ignored (no extra boards)
+// - Figurine input (♕xd5, ♘f6, …) is normalized to SAN before parsing
 // ============================================================================
 
 (function () {
   "use strict";
 
   // --------------------------------------------------------------------------
-  // Dependencies
+  // Dependency checks
   // --------------------------------------------------------------------------
   if (typeof Chess === "undefined") {
     console.warn("pgn-sticky.js: chess.js missing");
@@ -23,11 +24,10 @@
   }
 
   // --------------------------------------------------------------------------
-  // Constants / regexes (mirroring pgn.js)
+  // Constants / regex (copied from pgn.js)
   // --------------------------------------------------------------------------
   const PIECE_THEME_URL =
     "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
-
   const SAN_CORE_REGEX =
     /^([O0]-[O0](-[O0])?[+#]?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?|[a-h][1-8](=[QRBN])?[+#]?)$/;
   const RESULT_REGEX = /^(1-0|0-1|1\/2-1\/2|½-½|\*)$/;
@@ -77,6 +77,10 @@
     "=/∞": "⯹"
   };
 
+  function normalizeResult(r) {
+    return r ? r.replace(/1\/2-1\/2/g, "½-½") : "";
+  }
+
   function extractYear(d) {
     if (!d) return "";
     let p = d.split(".");
@@ -101,9 +105,9 @@
       .replace(/0-0|O-O/g, m => m[0] + "\u2011" + m[2]);
   }
 
-  // normalize figurine SAN (♔♕♖♗♘) to letters for parsing
-  function stripFigurines(s) {
-    return s
+  // Normalize figurines in the *input PGN text* to SAN letters
+  function normalizeFigurinesInPGN(text) {
+    return text
       .replace(/♔/g, "K")
       .replace(/♕/g, "Q")
       .replace(/♖/g, "R")
@@ -112,7 +116,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyPGNView — same parser as pgn.js, different layout
+  // StickyPGNView — same parsing as pgn.js, but laid out in 2 columns
   // --------------------------------------------------------------------------
   class StickyPGNView {
     constructor(src) {
@@ -146,39 +150,44 @@
     }
 
     build() {
-      let raw = this.sourceEl.textContent.trim(),
-        { headers: H, moveText: M } = StickyPGNView.split(raw),
+      // 1) Read raw PGN, normalize figurines to SAN letters for parsing
+      let raw = this.sourceEl.textContent.trim();
+      raw = normalizeFigurinesInPGN(raw);
+
+      let { headers: H, moveText: M } = StickyPGNView.split(raw),
         pgn = (H.length ? H.join("\n") + "\n\n" : "") + M,
         chess = new Chess();
 
       chess.load_pgn(pgn, { sloppy: true });
       let head = chess.header(),
-        res = head.Result || "",
+        res = normalizeResult(head.Result || ""),
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      // ---- Layout: two columns -------------------------------------------
+      // 2) Two-column layout
       const cols = document.createElement("div");
       cols.className = "pgn-sticky-cols";
       this.wrapper.appendChild(cols);
 
-      // Left sticky column: header + board + buttons
+      // Left sticky column (header + board + buttons)
       this.leftCol = document.createElement("div");
       this.leftCol.className = "pgn-sticky-left";
       cols.appendChild(this.leftCol);
 
+      // Right scrollable column (moves/comments/variations)
+      this.movesCol = document.createElement("div");
+      this.movesCol.className = "pgn-sticky-right";
+      cols.appendChild(this.movesCol);
+
+      // Header in left column (same format as pgn.js header)
       this.header(head);
 
+      // Sticky board + buttons in left column
       this.createStickyBoard();
-
       this.createStickyButtons();
 
-      // Right column: moves, comments, variations
-      this.rightCol = document.createElement("div");
-      this.rightCol.className = "pgn-sticky-right";
-      cols.appendChild(this.rightCol);
-
-      this.parse(movetext, chess, this.rightCol);
+      // 3) Parse moves into right column using the same logic as pgn.js
+      this.parse(movetext);
 
       this.sourceEl.replaceWith(this.wrapper);
     }
@@ -237,20 +246,20 @@
 
       wrap.appendChild(prev);
       wrap.appendChild(next);
-
       this.leftCol.appendChild(wrap);
     }
 
-    ensure(ctx, cls, outputParent) {
+    ensure(ctx, cls) {
       if (!ctx.container) {
         let p = document.createElement("p");
         p.className = cls;
-        outputParent.appendChild(p);
+        // NOTE: everything textual (moves, comments, variations) goes to movesCol
+        this.movesCol.appendChild(p);
         ctx.container = p;
       }
     }
 
-    parseComment(text, i, ctx, outputParent) {
+    parseComment(text, i, ctx) {
       let j = i;
       while (j < text.length && text[j] !== "}") j++;
       let raw = text.substring(i, j).trim();
@@ -259,7 +268,6 @@
       raw = raw.replace(/\[%.*?]/g, "").trim();
       if (!raw.length) return j;
 
-      // Strip result markers at comment end if they appear duplicated
       if (ctx.type === "main") {
         let k = j;
         while (k < text.length && /\s/.test(text[k])) k++;
@@ -277,49 +285,39 @@
         }
       }
 
-      // raw may contain "[D]" markers; in pgn.js they'd create diagrams.
-      // For sticky version we *ignore* diagrams and only keep text.
       let parts = raw.split("[D]");
       for (let idx = 0; idx < parts.length; idx++) {
         let c = parts[idx].trim();
         if (ctx.type === "variation") {
-          this.ensure(ctx, "pgn-variation", outputParent);
+          this.ensure(ctx, "pgn-variation");
           if (c) appendText(ctx.container, " " + c);
         } else {
           if (c) {
             let p = document.createElement("p");
             p.className = "pgn-comment";
             appendText(p, c);
-            outputParent.appendChild(p);
+            this.movesCol.appendChild(p);
           }
           ctx.container = null;
         }
-        // In pgn.js here: createDiagram. We intentionally skip that.
+        // In pgn.js this is where [D] diagrams are created.
+        // For pgn-sticky we intentionally do *not* create diagrams.
       }
-
       ctx.lastWasInterrupt = true;
       return j;
     }
 
     handleSAN(tok, ctx) {
-      const displayTok = makeCastlingUnbreakable(tok);
-      const asciiTok = stripFigurines(tok);
-
-      let core = asciiTok
-        .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
-        .replace(/0/g, "O");
-
+      let core = tok.replace(/[^a-hKQRBN0-9=O0-]+$/g, "").replace(/0/g, "O");
       if (!StickyPGNView.isSANCore(core)) {
-        appendText(ctx.container, displayTok + " ");
+        appendText(ctx.container, tok + " ");
         return null;
       }
-
       let base = ctx.baseHistoryLen || 0,
         count = ctx.chess.history().length,
         ply = base + count,
         white = ply % 2 === 0,
         num = Math.floor(ply / 2) + 1;
-
       if (ctx.type === "main") {
         if (white) appendText(ctx.container, num + "." + NBSP);
         else if (ctx.lastWasInterrupt)
@@ -329,52 +327,46 @@
         else if (ctx.lastWasInterrupt)
           appendText(ctx.container, num + "..." + NBSP);
       }
-
       ctx.prevFen = ctx.chess.fen();
       ctx.prevHistoryLen = ply;
-
       let mv = ctx.chess.move(core, { sloppy: true });
       if (!mv) {
-        appendText(ctx.container, displayTok + " ");
+        appendText(ctx.container, tok + " ");
         return null;
       }
-
       ctx.lastWasInterrupt = false;
-
       let span = document.createElement("span");
       span.className = "pgn-move sticky-move";
       span.dataset.fen = ctx.chess.fen();
-      span.textContent = displayTok + " ";
+      span.textContent = makeCastlingUnbreakable(tok) + " ";
       ctx.container.appendChild(span);
       return span;
     }
 
-    parse(t, chess, outputParent) {
-      let ctx = {
-        type: "main",
-        chess: chess,
-        container: null,
-        parent: null,
-        lastWasInterrupt: false,
-        prevFen: chess.fen(),
-        prevHistoryLen: 0,
-        baseHistoryLen: null
-      };
-
-      let i = 0;
+    parse(t) {
+      let chess = new Chess(),
+        ctx = {
+          type: "main",
+          chess: chess,
+          container: null,
+          parent: null,
+          lastWasInterrupt: false,
+          prevFen: chess.fen(),
+          prevHistoryLen: 0,
+          baseHistoryLen: null
+        },
+        i = 0;
 
       for (; i < t.length; ) {
         let ch = t[i];
 
-        // whitespace
         if (/\s/.test(ch)) {
           while (i < t.length && /\s/.test(t[i])) i++;
-          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, " ");
           continue;
         }
 
-        // variation start
         if (ch === "(") {
           i++;
           let fen = ctx.prevFen || ctx.chess.fen(),
@@ -392,11 +384,10 @@
             prevHistoryLen: len,
             baseHistoryLen: len
           };
-          this.ensure(ctx, "pgn-variation", outputParent);
+          this.ensure(ctx, "pgn-variation");
           continue;
         }
 
-        // variation end
         if (ch === ")") {
           i++;
           if (ctx.parent) {
@@ -407,13 +398,11 @@
           continue;
         }
 
-        // comment
         if (ch === "{") {
-          i = this.parseComment(t, i + 1, ctx, outputParent);
+          i = this.parseComment(t, i + 1, ctx);
           continue;
         }
 
-        // token
         let s = i;
         while (
           i < t.length &&
@@ -424,75 +413,68 @@
         let tok = t.substring(s, i);
         if (!tok) continue;
 
-        // skip [%...] tags
         if (/^\[%.*]$/.test(tok)) continue;
 
-        // ignore [D] here (no diagrams)
         if (tok === "[D]") {
+          // In pgn.js this would create a diagram; here we skip diagrams entirely.
           ctx.lastWasInterrupt = true;
           ctx.container = null;
           continue;
         }
 
-        // result
         if (RESULT_REGEX.test(tok)) {
           if (this.finalResultPrinted) continue;
           this.finalResultPrinted = true;
-          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, tok + " ");
           continue;
         }
 
-        // move numbers
         if (MOVE_NUMBER_REGEX.test(tok)) continue;
 
-        // SAN detection using figurine-normalized token
-        const asciiTok = stripFigurines(tok);
-        let core = asciiTok
-          .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
-          .replace(/0/g, "O");
-        let isSAN = StickyPGNView.isSANCore(core);
+        let core = tok
+            .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
+            .replace(/0/g, "O"),
+          isSAN = StickyPGNView.isSANCore(core);
 
         if (!isSAN) {
-          // eval
+          // EVAL tokens
           if (EVAL_MAP[tok]) {
-            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, EVAL_MAP[tok] + " ");
             continue;
           }
 
-          // NAG
+          // NAGs
           if (tok[0] === "$") {
             let code = +tok.slice(1);
             if (NAG_MAP[code]) {
-              this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+              this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
               appendText(ctx.container, NAG_MAP[code] + " ");
             }
             continue;
           }
 
-          // word-like (comment-ish) tokens
           if (/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok)) {
             if (ctx.type === "variation") {
-              this.ensure(ctx, "pgn-variation", outputParent);
+              this.ensure(ctx, "pgn-variation");
               appendText(ctx.container, " " + tok);
             } else {
               let p = document.createElement("p");
               p.className = "pgn-comment";
               appendText(p, tok);
-              outputParent.appendChild(p);
+              this.movesCol.appendChild(p);
               ctx.container = null;
               ctx.lastWasInterrupt = false;
             }
           } else {
-            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, tok + " ");
           }
           continue;
         }
 
-        // actual SAN move
-        this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation", outputParent);
+        this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
         let m = this.handleSAN(tok, ctx);
         if (!m) appendText(ctx.container, makeCastlingUnbreakable(tok) + " ");
       }
@@ -509,7 +491,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyBoard navigation (shared board for all sticky-move spans)
+  // StickyBoard navigation
   // --------------------------------------------------------------------------
   const StickyBoard = {
     board: null,
@@ -576,7 +558,7 @@
   };
 
   // --------------------------------------------------------------------------
-  // CSS — two columns, left sticky
+  // CSS — 2-column layout, left sticky
   // --------------------------------------------------------------------------
   const style = document.createElement("style");
   style.textContent = `
@@ -586,14 +568,14 @@
   padding-top:0.5rem;
 }
 
-/* two columns: left sticky, right scroll */
+/* Two columns: left sticky, right scroll */
 .pgn-sticky-cols{
   display:grid;
   grid-template-columns:340px 1fr;
   gap:2rem;
 }
 
-/* left side: sticky header+board+buttons */
+/* Left column: header + board + buttons (sticky as a whole) */
 .pgn-sticky-left{
   position:sticky;
   top:1rem;
@@ -601,23 +583,19 @@
   background:#fff;
 }
 
-/* header inside left column */
+/* Header inside left column */
 .pgn-sticky-header h4{
   margin:0 0 0.25rem 0;
 }
-.pgn-sticky-sub{
-  font-size:0.9rem;
-  color:#666;
-}
 
-/* board */
+/* Board */
 .pgn-sticky-board{
   width:320px;
   max-width:100%;
   margin-top:0.5rem;
 }
 
-/* buttons centered to board width */
+/* Buttons centered relative to board width */
 .pgn-sticky-buttons{
   width:320px;
   max-width:100%;
@@ -635,14 +613,14 @@
   border-radius:4px;
 }
 
-/* right column scrolls */
+/* Right column scrolls independently */
 .pgn-sticky-right{
   max-height:calc(100vh - 150px);
   overflow-y:auto;
   padding-right:0.5rem;
 }
 
-/* pgn text formatting */
+/* Moves and variations */
 .pgn-mainline,
 .pgn-variation{
   line-height:1.7;
@@ -653,13 +631,13 @@
   padding-left:0.5rem;
 }
 
-/* comments */
+/* Comments */
 .pgn-comment{
   font-style:italic;
   margin:0.3rem 0;
 }
 
-/* active move highlight */
+/* Active move highlight */
 .sticky-move-active{
   background:#ffe38a;
   border-radius:4px;
@@ -669,13 +647,13 @@
   document.head.appendChild(style);
 
   // --------------------------------------------------------------------------
-  // Init
+  // Init on DOMContentLoaded
   // --------------------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", () => {
-    const stickyEls = document.querySelectorAll("pgn-sticky");
-    if (!stickyEls.length) return;
+    const els = document.querySelectorAll("pgn-sticky");
+    if (!els.length) return;
 
-    stickyEls.forEach(el => new StickyPGNView(el));
+    els.forEach(el => new StickyPGNView(el));
     StickyBoard.activate(document);
   });
 })();
