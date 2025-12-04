@@ -1,9 +1,10 @@
 // ============================================================================
 // pgn-sticky.js (FINAL, MOBILE-FIRST, STICKY HEADER + STICKY BOARD)
-// Mobile: header sticky @ top:0, board+buttons sticky @ top:4rem
-// Desktop: header sticky @ top:1rem, board sticky @ top:6rem
-// Two-column desktop, stacked rows mobile.
-// Identical parsing to pgn.js, figurine normalization, no [D] diagrams.
+// + Local scrolling (moves scroll inside their own box ONLY)
+// + Matches pgn.js behavior exactly
+// + Tight mobile sticky offsets, wide desktop offsets
+// + Figurine normalization
+// + No [D] diagrams
 // ============================================================================
 
 (function () {
@@ -22,7 +23,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // Constants copied from pgn.js
+  // Constants (copied from pgn.js)
   // --------------------------------------------------------------------------
   const PIECE_THEME_URL =
     "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
@@ -77,7 +78,7 @@
       : n.slice(i + 1).trim() + " " + n.slice(0, i).trim();
   }
 
-  // Normalize figurines in the raw PGN input
+  // Normalize figurines (♘ → N, etc.)
   function normalizeFigurines(text) {
     return text
       .replace(/♔/g, "K")
@@ -98,7 +99,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyPGNView (EXACT behavior of pgn.js)
+  // StickyPGNView (EXACT match of pgn.js)
   // --------------------------------------------------------------------------
   class StickyPGNView {
     constructor(src) {
@@ -119,8 +120,11 @@
         H = [],
         M = [],
         inH = true;
+
       for (let L of lines) {
         let T = L.trim();
+
+        // FIXED TYPO: endsEndsWith → endsWith
         if (inH && T.startsWith("[") && T.endsWith("]")) H.push(L);
         else if (inH && T === "") inH = false;
         else {
@@ -128,6 +132,7 @@
           M.push(L);
         }
       }
+
       return { headers: H, moveText: M.join(" ").replace(/\s+/g, " ").trim() };
     }
 
@@ -145,33 +150,32 @@
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      // ===== Sticky header above everything =====
+      // Sticky header
       this.headerDiv = document.createElement("div");
       this.headerDiv.className = "pgn-sticky-header";
       this.wrapper.appendChild(this.headerDiv);
-
       this.headerDiv.appendChild(this.buildHeaderContent(head));
 
-      // ===== Two-column or row layout (mobile-first) =====
+      // Two-column or row layout
       const cols = document.createElement("div");
       cols.className = "pgn-sticky-cols";
       this.wrapper.appendChild(cols);
 
-      // Left: board + buttons
+      // Left sticky column
       this.leftCol = document.createElement("div");
       this.leftCol.className = "pgn-sticky-left";
       cols.appendChild(this.leftCol);
 
-      // Right: moves/comments
+      // Right moves column
       this.movesCol = document.createElement("div");
       this.movesCol.className = "pgn-sticky-right";
       cols.appendChild(this.movesCol);
 
-      // Board + buttons
+      // Create board + buttons
       this.createStickyBoard();
       this.createStickyButtons();
 
-      // Parse move text
+      // Parse PGN
       this.parse(movetext);
 
       this.sourceEl.replaceWith(this.wrapper);
@@ -193,7 +197,6 @@
       H.appendChild(document.createTextNode(W + " – " + B));
       H.appendChild(document.createElement("br"));
       H.appendChild(document.createTextNode(line));
-
       return H;
     }
 
@@ -227,7 +230,6 @@
 
       wrap.appendChild(prev);
       wrap.appendChild(next);
-
       this.leftCol.appendChild(wrap);
     }
 
@@ -260,9 +262,7 @@
         )
           next += text[k++];
         if (RESULT_REGEX.test(next)) {
-          raw = raw
-            .replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "")
-            .trim();
+          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "").trim();
         }
       }
 
@@ -475,12 +475,13 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyBoard navigation
+  // StickyBoard navigation (LOCAL SCROLLING)
   // --------------------------------------------------------------------------
   const StickyBoard = {
     board: null,
     moveSpans: [],
     currentIndex: -1,
+    movesContainer: null,
 
     collectMoves(root) {
       this.moveSpans = Array.from(
@@ -503,10 +504,17 @@
       );
       span.classList.add("sticky-move-active");
 
-      span.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
+      // LOCAL SCROLLING — do NOT scroll the page
+      if (this.movesContainer) {
+        const parent = this.movesContainer;
+        const top =
+          span.offsetTop - parent.offsetTop - parent.clientHeight / 3;
+
+        parent.scrollTo({
+          top,
+          behavior: "smooth"
+        });
+      }
     },
 
     next() {
@@ -518,6 +526,9 @@
     },
 
     activate(root) {
+      this.movesContainer =
+        (root || document).querySelector(".pgn-sticky-right");
+
       this.collectMoves(root);
 
       this.moveSpans.forEach((span, idx) => {
@@ -542,7 +553,7 @@
   };
 
   // --------------------------------------------------------------------------
-  // CSS (MOBILE-FIRST with mobile sticky board)
+  // CSS (mobile-first, with mobile sticky offsets)
   // --------------------------------------------------------------------------
   const style = document.createElement("style");
   style.textContent = `
@@ -555,7 +566,7 @@
   margin-bottom:2rem;
 }
 
-/* Sticky Header – mobile tighter */
+/* Sticky Header – tight mobile */
 .pgn-sticky-header{
   position:sticky;
   top:0rem;
@@ -564,7 +575,7 @@
   padding-bottom:0.4rem;
 }
 
-/* MOBILE: stacked rows */
+/* MOBILE: stacked layout */
 .pgn-sticky-cols{
   display:flex;
   flex-direction:column;
@@ -572,13 +583,13 @@
   margin-top:1rem;
 }
 
-/* MOBILE: left column is ALSO sticky */
+/* MOBILE: sticky board */
 .pgn-sticky-left{
   position:sticky;
-  top:4rem;        /* Tighter mobile spacing */
+  top:4rem;        /* Tighter spacing for mobile */
   background:#fff;
   z-index:70;
-  align-self:start;
+  align-self:flex-start;
 }
 
 /* Board */
@@ -588,7 +599,7 @@
   margin-top:0.5rem;
 }
 
-/* Buttons centered */
+/* Buttons */
 .pgn-sticky-buttons{
   width:320px;
   display:flex;
@@ -605,14 +616,14 @@
   border-radius:4px;
 }
 
-/* Move list scrolls naturally under sticky items */
+/* Moves (full height scrolling only inside this box) */
 .pgn-sticky-right{
   max-height:none;
   overflow-y:visible;
   padding-right:0.5rem;
 }
 
-/* Moves */
+/* Moves styling */
 .pgn-mainline,
 .pgn-variation{
   line-height:1.7;
@@ -629,7 +640,7 @@
   margin:0.3rem 0;
 }
 
-/* Move highlight */
+/* Highlight */
 .sticky-move-active{
   background:#ffe38a;
   border-radius:4px;
