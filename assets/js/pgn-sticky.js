@@ -1,33 +1,27 @@
 (function(){ "use strict";
 
 ////////////////////////////////////////////////////////////////////////////////
-// CONSTANTS & REGEXES (MATCH EXACTLY WITH pgn.js)
+// CONSTANTS & REGEXES
 ////////////////////////////////////////////////////////////////////////////////
 const PIECE_THEME_URL="https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
 SAN_CORE_REGEX=/^([O0]-[O0](-[O0])?[+#]?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?|[a-h][1-8](=[QRBN])?[+#]?)$/,
 RESULT_REGEX=/^(1-0|0-1|1\/2-1\/2|½-½|\*)$/,
 MOVE_NUMBER_REGEX=/^(\d+)(\.+)$/,
 NBSP="\u00A0",
-NAG_MAP={1:"!",2:"?",3:"‼",4:"⁇",5:"⁉",6:"⁈",13:"→",14:"↑",15:"⇆",16:"⇄",17:"⟂",18:"∞",19:"⟳",20:"⟲",36:"⩲",37:"⩱",38:"±",39:"∓",40:"+=",41:"=+",42:"±",43:"∓",44:"⨀",45:"⨁"};
+NAG_MAP={
+  1:"!",2:"?",3:"‼",4:"⁇",5:"⁉",6:"⁈",13:"→",14:"↑",15:"⇆",
+  16:"⇄",17:"⟂",18:"∞",19:"⟳",20:"⟲",36:"⩲",37:"⩱",38:"±",
+  39:"∓",40:"+=",41:"=+",42:"±",43:"∓",44:"⨀",45:"⨁"
+};
 
 const EVAL_MAP={
-  "=":"=",
-  "+/=":"⩲",
-  "=/+":"⩱",
-  "+/-":"±",
-  "+/−":"±",
-  "-/+":"∓",
-  "−/+":"∓",
-  "+-":"+−",
-  "+−":"+−",
-  "-+":"−+",
-  "−+":"−+",
-  "∞":"∞",
-  "=/∞":"⯹"
+  "=":"=","+/=":"⩲","=/+":"⩱","+/-":"±","+/−":"±",
+  "-/+":"∓","−/+":"∓","+-":"+−","+−":"+−","-+":"−+",
+  "−+":"−+","∞":"∞","=/∞":"⯹"
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// HELPERS (EXACT FROM pgn.js)
+// HELPERS
 ////////////////////////////////////////////////////////////////////////////////
 function ensureDeps(){
   if(typeof Chess==="undefined"){
@@ -44,8 +38,7 @@ function makeCastlingUnbreakable(s){
   return s.replace(/0-0-0|O-O-O/g,m=>m[0]+"\u2011"+m[2]+"\u2011"+m[4])
           .replace(/0-0|O-O/g,m=>m[0]+"\u2011"+m[2]);
 }
-
-// IMPORTANT: figurine → ASCII SAN before parsing
+// figurine → ASCII SAN (before parsing)
 function stripFigurines(s){
   return s
     .replace(/♔/g,"K")
@@ -56,7 +49,7 @@ function stripFigurines(s){
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PGNStickyView — EXACT pgn.js parser with sticky-board integration
+// PGNStickyView
 ////////////////////////////////////////////////////////////////////////////////
 
 class PGNStickyView{
@@ -95,15 +88,15 @@ class PGNStickyView{
         needs=/ (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext=needs?M:M+(res?" "+res:"");
 
-    // STICKY HEADER BLOCK
+    // Sticky header+board block
     this.headerBlock=document.createElement("div");
     this.headerBlock.className="pgn-sticky-headerblock";
     this.wrapper.appendChild(this.headerBlock);
 
     this.header(head,this.headerBlock);
     this.createStickyBoard(this.headerBlock);
+    this.createStickyButtons(this.headerBlock);
 
-    // parse moves/comments
     this.parse(movetext);
 
     this.sourceEl.replaceWith(this.wrapper);
@@ -119,7 +112,6 @@ class PGNStickyView{
     H.appendChild(document.createTextNode(W+" – "+B));
     H.appendChild(document.createElement("br"));
     H.appendChild(document.createTextNode(line));
-
     parent.appendChild(H);
   }
 
@@ -144,6 +136,26 @@ class PGNStickyView{
         appearSpeed:150
       });
     },0);
+  }
+
+  // NEW: navigation buttons
+  createStickyButtons(parent){
+    const wrap=document.createElement("div");
+    wrap.className="pgn-sticky-buttons";
+
+    const btnPrev=document.createElement("button");
+    btnPrev.className="pgn-sticky-btn";
+    btnPrev.textContent="◀";
+    btnPrev.addEventListener("click",()=>StickyBoard.prev());
+
+    const btnNext=document.createElement("button");
+    btnNext.className="pgn-sticky-btn";
+    btnNext.textContent="▶";
+    btnNext.addEventListener("click",()=>StickyBoard.next());
+
+    wrap.appendChild(btnPrev);
+    wrap.appendChild(btnNext);
+    parent.appendChild(wrap);
   }
 
   ensure(ctx,cls){
@@ -205,10 +217,9 @@ class PGNStickyView{
     if(text[j]==="}") j++;
 
     raw=raw.replace(/\[%.*?]/g,"").trim();
-    if(!raw.length) return j;
-
-    // REMOVE [D] COMPLETELY
     raw=raw.replace(/\[D]/g,"").trim();
+
+    if(!raw.length) return j;
 
     if(ctx.type==="main"){
       let k=j;
@@ -350,7 +361,7 @@ class PGNStickyView{
             ctx.container=null;
             ctx.lastWasInterrupt=false;
           }
-        }else{
+        } else {
           this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
           appendText(ctx.container,tok+" ");
         }
@@ -387,10 +398,10 @@ const StickyBoard={
 
   goto(i){
     if(i<0||i>=this.moveSpans.length) return;
-    this.currentIndex=i;
 
-    let span=this.moveSpans[i],
-        fen=span.dataset.fen;
+    this.currentIndex=i;
+    let span=this.moveSpans[i];
+    let fen=span.dataset.fen;
 
     if(fen && this.board){
       this.board.position(fen,true);
@@ -423,41 +434,53 @@ const StickyBoard={
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// CSS — FULLY UPDATED FOR STICKY HEADER + BOARD
+// CSS
 ////////////////////////////////////////////////////////////////////////////////
 
 const style=document.createElement("style");
 style.textContent=`
 
-/* Full block containing PGN */
 .pgn-sticky-block{
   position:relative;
   padding-top:0.5rem;
   margin-bottom:2rem;
 }
 
-/* Sticky Header+Board block */
 .pgn-sticky-headerblock{
   position:sticky;
-  top:0;
+  top:1rem;
   z-index:100;
-  background:#ffffff; /* Important: solid background */
-  padding:1rem 0 1rem 0;
+  background:#ffffff;
+  padding:0.5rem 0 1rem 0;
 }
 
-/* Title */
 .pgn-sticky-headerblock h4{
   margin:0 0 0.3rem 0;
 }
 
-/* Board */
 .pgn-sticky-diagram{
   width:320px;
   max-width:100%;
   margin:0.5rem 0 0 0;
 }
 
-/* Moves formatting (same as pgn.js) */
+/* NEW Navigation buttons */
+.pgn-sticky-buttons{
+  display:flex;
+  justify-content:center;
+  gap:1rem;
+  margin-top:0.3rem;
+}
+
+.pgn-sticky-btn{
+  font-size:1.2rem;
+  padding:0.2rem 0.6rem;
+  cursor:pointer;
+  background:#ffffff;
+  border:1px solid #ccc;
+  border-radius:4px;
+}
+
 .pgn-mainline,
 .pgn-variation{
   line-height:1.7;
@@ -467,7 +490,7 @@ style.textContent=`
 .pgn-variation{
   margin-left:1.5rem;
   padding-left:0.5rem;
-  border-left:2px solid #ddd;
+  border-left:2px solid transparent;
   margin-top:0.5rem;
 }
 
@@ -476,7 +499,6 @@ style.textContent=`
   margin:0.3rem 0;
 }
 
-/* Clickable moves */
 .sticky-move{
   cursor:pointer;
 }
