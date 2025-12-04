@@ -1,13 +1,35 @@
 (function(){ "use strict";
 
+////////////////////////////////////////////////////////////////////////////////
+// CONSTANTS & REGEXES (identical to pgn.js)
+////////////////////////////////////////////////////////////////////////////////
 const PIECE_THEME_URL="https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
 SAN_CORE_REGEX=/^([O0]-[O0](-[O0])?[+#]?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?|[a-h][1-8](=[QRBN])?[+#]?)$/,
 RESULT_REGEX=/^(1-0|0-1|1\/2-1\/2|½-½|\*)$/,
 MOVE_NUMBER_REGEX=/^(\d+)(\.+)$/,
 NBSP="\u00A0",
-EVAL_TOKEN=/^[A-Za-z0-9\+\-\=∞⯹]+$/,
 NAG_MAP={1:"!",2:"?",3:"‼",4:"⁇",5:"⁉",6:"⁈",13:"→",14:"↑",15:"⇆",16:"⇄",17:"⟂",18:"∞",19:"⟳",20:"⟲",36:"⩲",37:"⩱",38:"±",39:"∓",40:"+=",41:"=+",42:"±",43:"∓",44:"⨀",45:"⨁"};
 
+// Evaluation symbol mapping (same as pgn.js)
+const EVAL_MAP={
+  "=":"=",
+  "+/=":"⩲",
+  "=/+":"⩱",
+  "+/-":"±",
+  "+/−":"±",
+  "-/+":"∓",
+  "−/+":"∓",
+  "+-":"+−",
+  "+−":"+−",
+  "-+":"−+",
+  "−+":"−+",
+  "∞":"∞",
+  "=/∞":"⯹"
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// HELPERS (identical to pgn.js)
+////////////////////////////////////////////////////////////////////////////////
 function ensureDeps(){
   if(typeof Chess==="undefined"){
     console.warn("pgn-sticky.js: chess.js missing");
@@ -24,33 +46,16 @@ function makeCastlingUnbreakable(s){
           .replace(/0-0|O-O/g,m=>m[0]+"\u2011"+m[2]);
 }
 
-// ★★★★★ NEW EVALUATION SYMBOL MAP ★★★★★
-const EVAL_MAP = {
-  "=": "=",
-  "+/=": "⩲",
-  "=/+": "⩱",
-  "+/-": "±",
-  "+/−": "±",
-  "-/+": "∓",
-  "−/+": "∓",
-  "+-": "+−",
-  "+−": "+−",
-  "-+": "−+",
-  "−+": "−+",
-  "∞": "∞",
-  "=/∞": "⯹"
-};
-// ★★★★★ END NEW MAP ★★★★★
-
-
-// ========================================================================
-//                          Sticky PGN View
-//  - Same parser as PGNGameView in pgn.js
-//  - NO [D] diagrams
-//  - ONE sticky, playable board before moves
-// ========================================================================
+////////////////////////////////////////////////////////////////////////////////
+// PGN STICKY VIEW  — SAME PARSER AS pgn.js
+// except:
+//   - NO [D] diagrams
+//   - ONE sticky board before moves
+//   - moves become .sticky-move
+////////////////////////////////////////////////////////////////////////////////
 
 class PGNStickyView{
+
   constructor(src){
     this.sourceEl=src;
     this.wrapper=document.createElement("div");
@@ -60,8 +65,10 @@ class PGNStickyView{
     this.applyFigurines();
   }
 
+  // identical to pgn.js
   static isSANCore(t){ return SAN_CORE_REGEX.test(t); }
 
+  // identical to pgn.js
   static split(t){
     let lines=t.split(/\r?\n/),H=[],M=[],inH=true;
     for(let L of lines){
@@ -78,19 +85,20 @@ class PGNStickyView{
         {headers:H,moveText:M}=PGNStickyView.split(raw),
         pgn=(H.length?H.join("\n")+"\n\n":"")+M,
         chess=new Chess();
+
     chess.load_pgn(pgn,{sloppy:true});
     let head=chess.header(),
         res=normalizeResult(head.Result||""),
         needs=/ (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext=needs?M:M+(res?" "+res:"");
 
-    // header (EXACT same format as pgn.js)
+    // HEADER (exact same format as pgn.js)
     this.header(head);
 
-    // sticky playable board UNDER header, BEFORE moves
+    // SINGLE sticky playable board under header
     this.createStickyBoard();
 
-    // parse moves/comments/variations (NO [D] diagrams)
+    // parse moves/comments/variations using pgn.js engine
     this.parse(movetext);
 
     this.sourceEl.replaceWith(this.wrapper);
@@ -102,6 +110,7 @@ class PGNStickyView{
         Y=extractYear(h.Date),
         line=(h.Event||"")+(Y?", "+Y:""),
         H=document.createElement("h4");
+
     H.appendChild(document.createTextNode(W+" – "+B));
     H.appendChild(document.createElement("br"));
     H.appendChild(document.createTextNode(line));
@@ -117,6 +126,7 @@ class PGNStickyView{
     d.id="pgn-sticky-board";
     d.className="pgn-sticky-diagram";
     this.wrapper.appendChild(d);
+
     setTimeout(()=>{ 
       StickyBoard.board=Chessboard(d,{
         position:"start",
@@ -139,9 +149,17 @@ class PGNStickyView{
     }
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // handleSAN — identical to pgn.js except span includes .sticky-move
+  ////////////////////////////////////////////////////////////////////////////
   handleSAN(tok,ctx){
     let core=tok.replace(/[^a-hKQRBN0-9=O0-]+$/g,"").replace(/0/g,"O");
-    if(!PGNStickyView.isSANCore(core)){ appendText(ctx.container,tok+" "); return null;}
+
+    if(!PGNStickyView.isSANCore(core)){
+      appendText(ctx.container,tok+" ");
+      return null;
+    }
+
     let base=ctx.baseHistoryLen||0,
         count=ctx.chess.history().length,
         ply=base+count,
@@ -160,32 +178,35 @@ class PGNStickyView{
     ctx.prevHistoryLen=ply;
 
     let mv=ctx.chess.move(core,{sloppy:true});
-    if(!mv){ appendText(ctx.container,tok+" "); return null;}
+    if(!mv){
+      appendText(ctx.container,tok+" ");
+      return null;
+    }
+
     ctx.lastWasInterrupt=false;
 
     let span=document.createElement("span");
-    // same as pgn.js, PLUS sticky behavior
-    span.className="pgn-move sticky-move";
+    span.className="pgn-move sticky-move";   // <— difference from pgn.js
     span.dataset.fen=ctx.chess.fen();
     span.textContent=makeCastlingUnbreakable(tok)+" ";
     ctx.container.appendChild(span);
     return span;
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // parseComment — identical to pgn.js except NO [D] diagrams
+  ////////////////////////////////////////////////////////////////////////////
   parseComment(text,i,ctx){
     let j=i;
     while(j<text.length && text[j]!=="}") j++;
     let raw=text.substring(i,j).trim();
-    if(text[j]=="}") j++;
+    if(text[j]==="}") j++;
 
     raw=raw.replace(/\[%.*?]/g,"").trim();
     if(!raw.length) return j;
 
-    // ⚠ DIFFERENCE FROM pgn.js:
-    // We DO NOT create diagrams for [D] in sticky view.
-    // Strip [D] markers instead of splitting/creating boards.
+    // sticky PGN DIFFERENCE: remove [D], no diagrams
     raw=raw.replace(/\[D]/g,"").trim();
-    if(!raw.length) return j;
 
     if(ctx.type==="main"){
       let k=j;
@@ -197,7 +218,6 @@ class PGNStickyView{
       }
     }
 
-    // keep same main/variation comment behavior
     if(ctx.type==="variation"){
       this.ensure(ctx,"pgn-variation");
       if(raw) appendText(ctx.container," "+raw);
@@ -215,14 +235,27 @@ class PGNStickyView{
     return j;
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // parse — EXACT pgn.js algorithm, except [D] does nothing
+  ////////////////////////////////////////////////////////////////////////////
   parse(t){
     let chess=new Chess(),
-        ctx={type:"main",chess,chess,container:null,parent:null,lastWasInterrupt:false,prevFen:chess.fen(),prevHistoryLen:0,baseHistoryLen:null},
+        ctx={
+          type:"main",
+          chess,chess,
+          container:null,
+          parent:null,
+          lastWasInterrupt:false,
+          prevFen:chess.fen(),
+          prevHistoryLen:0,
+          baseHistoryLen:null
+        },
         i=0;
 
     for(;i<t.length;){
       let ch=t[i];
 
+      // whitespace
       if(/\s/.test(ch)){
         while(i<t.length && /\s/.test(t[i])) i++;
         this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
@@ -230,15 +263,26 @@ class PGNStickyView{
         continue;
       }
 
+      // variation start
       if(ch==="("){
         i++;
         let fen=ctx.prevFen||ctx.chess.fen(),
             len=(typeof ctx.prevHistoryLen==="number"?ctx.prevHistoryLen:ctx.chess.history().length);
-        ctx={type:"variation",chess:new Chess(fen),container:null,parent:ctx,lastWasInterrupt:true,prevFen:fen,prevHistoryLen:len,baseHistoryLen:len};
+        ctx={
+          type:"variation",
+          chess:new Chess(fen),
+          container:null,
+          parent:ctx,
+          lastWasInterrupt:true,
+          prevFen:fen,
+          prevHistoryLen:len,
+          baseHistoryLen:len
+        };
         this.ensure(ctx,"pgn-variation");
         continue;
       }
 
+      // variation end
       if(ch===")"){
         i++;
         if(ctx.parent){
@@ -249,11 +293,13 @@ class PGNStickyView{
         continue;
       }
 
+      // comment
       if(ch==="{"){
         i=this.parseComment(t,i+1,ctx);
         continue;
       }
 
+      // token
       let s=i;
       while(i<t.length && !/\s/.test(t[i]) && !"(){}".includes(t[i])) i++;
       let tok=t.substring(s,i);
@@ -261,8 +307,7 @@ class PGNStickyView{
 
       if(/^\[%.*]$/.test(tok)) continue;
 
-      // ⚠ DIFFERENCE FROM pgn.js:
-      // Do NOT create diagrams for [D], just treat it as a separator.
+      // sticky PGN difference: [D] ignored
       if(tok==="[D]"){
         ctx.lastWasInterrupt=true;
         ctx.container=null;
@@ -279,27 +324,30 @@ class PGNStickyView{
 
       if(MOVE_NUMBER_REGEX.test(tok)) continue;
 
+      // token may be SAN
       let core=tok.replace(/[^a-hKQRBN0-9=O0-]+$/g,"").replace(/0/g,"O"),
           isSAN=PGNStickyView.isSANCore(core);
 
       if(!isSAN){
 
-        // ★★★★★ NEW EVAL TOKEN HANDLING ★★★★★
-        if (EVAL_MAP[tok]) {
-          this.ensure(ctx, ctx.type==="main" ? "pgn-mainline" : "pgn-variation");
-          appendText(ctx.container, EVAL_MAP[tok] + " ");
+        // EVAL MAP
+        if(EVAL_MAP[tok]){
+          this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
+          appendText(ctx.container,EVAL_MAP[tok]+" ");
           continue;
         }
-        // ★★★★★ END EVAL TOKEN HANDLING ★★★★★
 
+        // NAG MAP
         if(tok[0]==="$"){
-          let code=+tok.slice(1); if(NAG_MAP[code]){
+          let code=+tok.slice(1);
+          if(NAG_MAP[code]){
             this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
             appendText(ctx.container,NAG_MAP[code]+" ");
           }
           continue;
         }
 
+        // word-like commentary
         if(/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok)){
           if(ctx.type==="variation"){
             this.ensure(ctx,"pgn-variation");
@@ -312,19 +360,23 @@ class PGNStickyView{
             ctx.container=null;
             ctx.lastWasInterrupt=false;
           }
-        } else{
+        }else{
           this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
           appendText(ctx.container,tok+" ");
         }
         continue;
       }
 
+      // SAN move
       this.ensure(ctx,ctx.type==="main"?"pgn-mainline":"pgn-variation");
       let m=this.handleSAN(tok,ctx);
       if(!m) appendText(ctx.container,makeCastlingUnbreakable(tok)+" ");
     }
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // Figurines — identical to pgn.js
+  ////////////////////////////////////////////////////////////////////////////
   applyFigurines(){
     const map={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
     this.wrapper.querySelectorAll(".pgn-move").forEach(span=>{
@@ -334,18 +386,16 @@ class PGNStickyView{
   }
 }
 
-
-// ========================================================================
-//                          StickyBoard Engine
-//  (board created by PGNStickyView; this only drives it)
-// ========================================================================
+////////////////////////////////////////////////////////////////////////////////
+// StickyBoard (board created by PGNStickyView)
+////////////////////////////////////////////////////////////////////////////////
 
 const StickyBoard={
   board:null,
   moveSpans:[],
   currentIndex:-1,
 
-  initBoard(){ /* no-op, board created in PGNStickyView */ },
+  initBoard(){},
 
   collectMoves(root){
     this.moveSpans=Array.from(
@@ -353,22 +403,18 @@ const StickyBoard={
     );
   },
 
-  goto(index){
-    if(index<0 || index>=this.moveSpans.length) return;
-    this.currentIndex=index;
-    let span=this.moveSpans[index],
+  goto(i){
+    if(i<0||i>=this.moveSpans.length) return;
+    this.currentIndex=i;
+    let span=this.moveSpans[i],
         fen=span.dataset.fen;
-    if(!fen || !this.board) return;
+    if(!fen||!this.board) return;
 
     this.board.position(fen,true);
 
     this.moveSpans.forEach(s=>s.classList.remove("sticky-move-active"));
     span.classList.add("sticky-move-active");
-    span.scrollIntoView({
-      behavior:"smooth",
-      block:"center",
-      inline:"nearest"
-    });
+    span.scrollIntoView({behavior:"smooth",block:"center"});
   },
 
   next(){ this.goto(this.currentIndex+1); },
@@ -376,11 +422,9 @@ const StickyBoard={
 
   activate(root){
     this.collectMoves(root);
-    this.moveSpans.forEach((span,idx)=>{
-      span.style.cursor="pointer";
-      span.addEventListener("click",()=>this.goto(idx));
+    this.moveSpans.forEach((span,i)=>{
+      span.addEventListener("click",()=>this.goto(i));
     });
-
     window.addEventListener("keydown",e=>{
       let tag=(e.target.tagName||"").toLowerCase();
       if(tag==="input"||tag==="textarea") return;
@@ -390,11 +434,9 @@ const StickyBoard={
   }
 };
 
-
-// ========================================================================
-// CSS for sticky blocks
-// ========================================================================
-
+////////////////////////////////////////////////////////////////////////////////
+// CSS
+////////////////////////////////////////////////////////////////////////////////
 const style=document.createElement("style");
 style.textContent=`
 .pgn-sticky-block{
@@ -441,12 +483,10 @@ style.textContent=`
 `;
 document.head.appendChild(style);
 
-
-// ========================================================================
-// Init: only run on pages with <pgn-sticky>
-// ========================================================================
-
-function initStickyPGN(){
+////////////////////////////////////////////////////////////////////////////////
+// INIT — only run if <pgn-sticky> exists
+////////////////////////////////////////////////////////////////////////////////
+function initSticky(){
   if(!ensureDeps()) return;
   let els=document.querySelectorAll("pgn-sticky");
   if(!els.length) return;
@@ -455,7 +495,7 @@ function initStickyPGN(){
 }
 
 document.readyState==="loading"
- ?document.addEventListener("DOMContentLoaded",initStickyPGN)
- :initStickyPGN();
+  ?document.addEventListener("DOMContentLoaded",initSticky)
+  :initSticky();
 
 })();
