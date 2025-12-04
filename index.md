@@ -3,7 +3,9 @@ title: JekyllChess
 layout: default
 ---
 
-<h1><img src="/assets/favicon.png" /> {{ site.title }}</h1>
+<a href="{{ site.baseurl }}"><h1><img src="/assets/favicon.png" /> {{ site.title }}</h1></a>
+
+
 
 {% for post in site.posts %}
 
@@ -13,6 +15,7 @@ layout: default
       {{ post.title }}
     </a>
   </h1>
+  <fen>{{ post.FEN }}</fen>
   {{ post.excerpt }}
 </article>
 
