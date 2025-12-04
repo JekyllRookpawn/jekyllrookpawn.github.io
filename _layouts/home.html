@@ -3,21 +3,6 @@ title: JekyllChess
 layout: default
 ---
 
-<h1><a href="{{ baseurl }}"><img src="/assets/favicon.png" /> {{ site.title }}</a></h1>
-<h2>{{ description }}</h2>
-
 {{ content }}
 
-{% for post in site.posts %}
-
-<article>
-  <h1>
-    <a href="{{ site.path }}{{ post.url }}">
-      {{ post.title }}
-    </a>
-  </h1>
-  <fen>{{ post.FEN }}</fen>
-  {{ post.excerpt }}
-</article>
-
-{% endfor %}
+ {% include post-block.html %}
