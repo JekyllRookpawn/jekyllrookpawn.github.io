@@ -1,5 +1,5 @@
+<script src="pgn.js"></script>
 
-// assets/js/stickyboard.js
 (function () {
     "use strict";
 
