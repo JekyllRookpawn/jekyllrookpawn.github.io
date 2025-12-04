@@ -3,7 +3,7 @@ title: JekyllChess
 layout: default
 ---
 
-<h1><img src="/assets/img/rookpawn.png" />{{ site.title }}</h1>
+<h1><img src="/assets/rookpawn.png" />{{ site.title }}</h1>
 
 {% for post in site.posts %}
 
