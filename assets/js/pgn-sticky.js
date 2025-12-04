@@ -666,15 +666,13 @@
   line-height:1.7;
   font-size:1rem;
 }
-.pgn-variation{
-  margin-left:1.5rem;
-  padding-left:0.5rem;
+.pgn-variation,
+.pgn-comment {
+  font-weight: 400 !important;
 }
 
-/* Comments */
-.pgn-comment{
-  font-style:italic;
-  margin:0.3rem 0;
+.pgn-mainline {
+  font-weight: 600 !important;
 }
 
 /* Highlight active move */
