@@ -10,7 +10,7 @@ h1.header {margin: 2rem 0}
 h1.header img{height:1.5em;margin-right:.5rem}
 a,a:visited,a:hover,a:active{color:#000}
 
-body, body * {
+* {
       font-family: "Raleway", sans-serif;
       font-optical-sizing: auto;
       font-weight: 400;
