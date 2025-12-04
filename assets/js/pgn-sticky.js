@@ -1,9 +1,9 @@
 // ============================================================================
-// pgn-sticky.js
-// FINAL VERSION — Two-row layout:
-// Row 1 (sticky): Header + diagram + buttons
-// Row 2 (scrollable): Moves, comments, variations
-// Matches pgn.js parser and features
+// pgn-sticky.js — FINAL VERSION
+// Two-row layout: 
+//   Row 1 (sticky): title + subtitle + board + centered buttons
+//   Row 2 (scrollable): moves, variations, comments
+// Matches pgn.js parsing and figurines exactly
 // ============================================================================
 
 (function () {
@@ -18,7 +18,7 @@
     const PIECE_THEME_URL =
         "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
 
-    // Same regex/constants as pgn.js
+    // Regex + constants from pgn.js
     const SAN_CORE_REGEX = /^([O0]-[O0](-[O0])?[+#]?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?|[a-h][1-8](=[QRBN])?[+#]?)$/;
     const RESULT_REGEX = /^(1-0|0-1|1\/2-1\/2|½-½|\*)$/;
     const MOVE_NUMBER_REGEX = /^(\d+)(\.+)$/;
@@ -81,7 +81,7 @@
             this.wrapper = document.createElement("div");
             this.wrapper.className = "pgn-sticky-block";
             this.build();
-            this.applyFigurines();   // same as pgn.js
+            this.applyFigurines();
         }
 
         splitPGN(raw) {
@@ -122,21 +122,26 @@
             const headerObj = chess.header();
 
             // ============================================================
-            // ROW 1 — Sticky header + board + buttons
+            // ROW 1 — Sticky header + boardwrap + centered buttons
             // ============================================================
             this.headerBlock = document.createElement("div");
             this.headerBlock.className = "pgn-sticky-headerblock";
             this.wrapper.appendChild(this.headerBlock);
 
             this.buildHeader(headerObj, this.headerBlock);
-            this.buildStickyBoard(this.headerBlock);
-            this.buildStickyButtons(this.headerBlock);
 
-            // Reset board state for replay
+            // Board-centered wrapper
+            this.boardWrap = document.createElement("div");
+            this.boardWrap.className = "pgn-sticky-boardwrap";
+            this.headerBlock.appendChild(this.boardWrap);
+
+            this.buildStickyBoard(this.boardWrap);
+            this.buildStickyButtons(this.boardWrap);
+
             chess.reset();
 
             // ============================================================
-            // ROW 2 — Scrollable PGN data
+            // ROW 2 — Scrollable PGN container
             // ============================================================
             this.scrollBox = document.createElement("div");
             this.scrollBox.className = "pgn-sticky-scrollbox";
@@ -208,7 +213,7 @@
         }
 
         // ============================================================================
-        // PGN Parsing (IDENTICAL to pgn.js except [D] removed)
+        // PGN Parsing (same logic as pgn.js, except [D] removed)
         // ============================================================================
         parse(t, chess, outputParent) {
             let ctx = {
@@ -239,8 +244,8 @@
 
                 let raw = text.substring(i, j).trim();
                 if (text[j] === "}") j++;
-                raw = raw.replace(/\[%.*?]/g, "").trim();
 
+                raw = raw.replace(/\[%.*?]/g, "").trim();
                 if (!raw.length) return j;
 
                 if (ctx.type === "main") {
@@ -297,7 +302,6 @@
 
                 if (ch === ")") {
                     i++;
-
                     if (ctx.parent) {
                         ctx = ctx.parent;
                         ctx.lastWasInterrupt = true;
@@ -371,6 +375,7 @@
                         ensure(ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
                         appendText(ctx.container, tok + " ");
                     }
+
                     continue;
                 }
 
@@ -485,7 +490,7 @@
     };
 
     // ============================================================================
-    // CSS (clean, borderless, no shadows)
+    // CSS (clean, board-centered buttons, two-row)
     // ============================================================================
     const style = document.createElement("style");
     style.textContent = `
@@ -495,7 +500,7 @@
     margin-bottom: 2rem;
 }
 
-/* ROW 1 — Sticky title + board + buttons */
+/* ROW 1 — Sticky title + board + centered buttons */
 .pgn-sticky-headerblock {
     position: sticky;
     top: 1rem;
@@ -508,16 +513,22 @@
     margin: 0 0 0.3rem 0;
 }
 
-/* Board in Row 1 */
+/* Board-centered wrapper */
+.pgn-sticky-boardwrap {
+    width: 320px;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+/* Board */
 .pgn-sticky-diagram {
     width: 320px;
     max-width: 100%;
     margin: 0.5rem 0 0 0;
 }
 
-/* Center the buttons */
+/* Centered buttons */
 .pgn-sticky-buttons {
-    width: 100%;
     display: flex;
     justify-content: center;
     gap: 1rem;
@@ -538,9 +549,9 @@
     background: #f5f5f5;
 }
 
-/* ROW 2 — Scrollable PGN text */
+/* ROW 2 — Scrollable moves */
 .pgn-sticky-scrollbox {
-    max-height: calc(100vh - 440px); 
+    max-height: calc(100vh - 440px);
     overflow-y: auto;
     padding-right: 0.5rem;
     margin-top: 1rem;
