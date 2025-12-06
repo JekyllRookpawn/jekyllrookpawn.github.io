@@ -714,6 +714,31 @@
     height: 350px;
     overflow-y: auto;
   }
+
+  /* Standardize all text in the right column */
+.pgn-sticky-right * {
+    line-height: 1.55;    /* consistent row height */
+    margin-top: 0;        /* remove weird spacing above */
+    margin-bottom: 0.35rem; /* small rhythm */
+    padding: 0;           /* ensures no internal offsets */
+}
+
+/* Fine-tune comments */
+.pgn-sticky-right .pgn-comment {
+    margin: 0.35rem 0;
+    line-height: 1.5;
+}
+
+/* Fine-tune main line moves (bold) */
+.pgn-sticky-right .pgn-mainline {
+    font-weight: 600;
+}
+
+/* Variation moves (normal weight) */
+.pgn-sticky-right .pgn-variation {
+    font-weight: 400;
+}
+
 }
 
 `;
