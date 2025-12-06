@@ -1,10 +1,10 @@
 // ============================================================================
 // pgn-sticky.js
-// - <pgn-sticky> renderer with sticky board + local scrolling
-// - Matches pgn.js parsing & figurines
-// - Mobile-first, with special mobile behavior:
-//   * Header not sticky on mobile
-//   * Board sticky, centered, white background block
+// Full version with:
+// - NON-sticky header on Desktop
+// - Sticky board everywhere
+// - Mobile: centered board, white background block, no header sticky
+// - Variation support, bold mainline, figurines, local scrolling
 // ============================================================================
 
 (function () {
@@ -78,7 +78,7 @@
       : n.slice(i + 1).trim() + " " + n.slice(0, i).trim();
   }
 
-  // Normalize figurines (♘ → N etc.)
+  // Normalize figurines (♘ → N etc.) before parsing
   function normalizeFigurines(text) {
     return text
       .replace(/♔/g, "K")
@@ -99,7 +99,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyPGNView (pgn.js clone with sticky UI)
+  // StickyPGNView (pgn.js–compatible parsing + sticky layout)
   // --------------------------------------------------------------------------
   class StickyPGNView {
     constructor(src) {
@@ -149,28 +149,26 @@
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      // Header (non-sticky on mobile; sticky via desktop media query)
+      // Header (non-sticky on mobile & desktop)
       this.headerDiv = document.createElement("div");
       this.headerDiv.className = "pgn-sticky-header";
       this.wrapper.appendChild(this.headerDiv);
       this.headerDiv.appendChild(this.buildHeaderContent(head));
 
-      // Two-column container
+      // Two-column wrapper
       const cols = document.createElement("div");
       cols.className = "pgn-sticky-cols";
       this.wrapper.appendChild(cols);
 
-      // Left: board + buttons
       this.leftCol = document.createElement("div");
       this.leftCol.className = "pgn-sticky-left";
       cols.appendChild(this.leftCol);
 
-      // Right: moves
       this.movesCol = document.createElement("div");
       this.movesCol.className = "pgn-sticky-right";
       cols.appendChild(this.movesCol);
 
-      // Board & buttons
+      // Create board + navigation buttons
       this.createStickyBoard();
       this.createStickyButtons();
 
@@ -323,7 +321,7 @@
       let span = document.createElement("span");
       span.className = "pgn-move sticky-move";
       span.dataset.fen = ctx.chess.fen();
-      span.dataset.mainline = (ctx.type === "main") ? "1" : "0";
+      span.dataset.mainline = ctx.type === "main" ? "1" : "0";
       span.textContent = makeCastlingUnbreakable(tok) + " ";
       ctx.container.appendChild(span);
 
@@ -397,6 +395,7 @@
           !"(){}".includes(t[i])
         )
           i++;
+
         let tok = t.substring(s, i);
         if (!tok) continue;
 
@@ -475,7 +474,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // StickyBoard: mainline-only navigation + local scrolling
+  // StickyBoard
   // --------------------------------------------------------------------------
   const StickyBoard = {
     board: null,
@@ -506,13 +505,11 @@
       );
       span.classList.add("sticky-move-active");
 
-      // Update mainline index
       if (span.dataset.mainline === "1" && this.mainlineMoves.length) {
         const mi = this.mainlineMoves.indexOf(span);
         if (mi !== -1) this.mainlineIndex = mi;
       }
 
-      // Local scrolling in moves pane
       if (this.movesContainer) {
         const parent = this.movesContainer;
         const top =
@@ -578,7 +575,7 @@
   };
 
   // --------------------------------------------------------------------------
-  // CSS (mobile-first; desktop overrides in @media)
+  // CSS (mobile-first, desktop override WITHOUT sticky header)
   // --------------------------------------------------------------------------
   const style = document.createElement("style");
   style.textContent = `
@@ -592,12 +589,9 @@
   margin-bottom: 2rem;
 }
 
-/* MOBILE: header not sticky */
 .pgn-sticky-header {
   position: static;
-  top: auto;
   background: #fff;
-  z-index: auto;
   padding-bottom: 0.4rem;
 }
 
@@ -609,7 +603,7 @@
   margin-top: 1rem;
 }
 
-/* MOBILE: sticky board, centered, white block */
+/* MOBILE: sticky board, centered */
 .pgn-sticky-left {
   position: sticky;
   top: 0rem;
@@ -631,7 +625,6 @@
   z-index: 72;
 }
 
-/* Buttons under board, centered */
 .pgn-sticky-buttons {
   width: 320px;
   display: flex;
@@ -651,7 +644,7 @@
   border-radius: 4px;
 }
 
-/* Moves area (mobile: page scroll) */
+/* Moves area (mobile) */
 .pgn-sticky-right {
   max-height: none;
   overflow-y: visible;
@@ -681,7 +674,6 @@
   border: none;
 }
 
-/* Highlight active move */
 .sticky-move-active {
   background: #ffe38a;
   border-radius: 4px;
@@ -693,10 +685,11 @@
 ---------------------------------------------------- */
 @media (min-width: 768px) {
 
+  /* DESKTOP: header NOT sticky anymore */
   .pgn-sticky-header {
-    position: sticky;
-    top: 1rem;
-    z-index: 80;
+    position: static;
+    top: auto;
+    z-index: auto;
   }
 
   .pgn-sticky-cols {
@@ -709,6 +702,7 @@
     top: 6rem;
     align-items: flex-start;
     padding: 0;
+    background: transparent;
   }
 
   .pgn-sticky-board,
