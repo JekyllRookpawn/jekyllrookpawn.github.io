@@ -712,7 +712,7 @@
   }
 
   .pgn-sticky-right {
-    max-height: calc(100vh - 7rem);
+    max-height: 350px;
     overflow-y: auto;
   }
 }
