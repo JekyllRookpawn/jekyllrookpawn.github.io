@@ -629,7 +629,7 @@
 .pgn-sticky-board{
   width:320px;
   max-width:100%;
-  margin-top:0.5rem;
+  top:1rem;
 }
 
 /* Buttons */
