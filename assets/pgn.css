@@ -25,7 +25,6 @@
 }
 
 .pgn-blog-block .pgn-comment {
-  font-style: italic;
   margin: 0.35rem 0;
   line-height: 1.5;
 }
@@ -131,7 +130,6 @@
 }
 
 .pgn-comment {
-  font-style: italic;
   margin: 0.3rem 0;
   padding: 0;
   border: none;
