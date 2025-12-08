@@ -1,16 +1,19 @@
 // ============================================================================
 // pgn-reader.js
-// Renders <pgn-reader> with:
-// - header + two-column layout
-// - sticky board (mobile: centered, desktop: left column)
-// - prev/next buttons + keyboard arrows
-// - mainline tracking, bold mainline vs normal variations
-// - figurines and local scrolling
+// Full version with:
+// - NON-reader header on Desktop
+// - Reader board everywhere
+// - Mobile: centered board, white background block, no header reader
+// - Variation support, bold mainline, figurines, local scrolling
+// - Smooth board animations (NEW)
 // ============================================================================
 
 (function () {
   "use strict";
 
+  // --------------------------------------------------------------------------
+  // Dependency checks
+  // --------------------------------------------------------------------------
   if (typeof Chess === "undefined") {
     console.warn("pgn-reader.js: chess.js missing");
     return;
@@ -19,26 +22,81 @@
     console.warn("pgn-reader.js: chessboard.js missing");
     return;
   }
-  if (typeof PGNCore === "undefined") {
-    console.warn("pgn-reader.js: PGNCore (pgn-core.js) missing");
-    return;
+
+  // --------------------------------------------------------------------------
+  // Constants (from pgn.js)
+  // --------------------------------------------------------------------------
+  const PIECE_THEME_URL =
+    "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
+
+  const SAN_CORE_REGEX =
+    /^([O0]-[O0](-[O0])?[+#]?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?|[a-h][1-8](=[QRBN])?[+#]?)$/;
+
+  const RESULT_REGEX = /^(1-0|0-1|1\/2-1\/2|½-½|\*)$/;
+  const MOVE_NUMBER_REGEX = /^(\d+)(\.+)$/;
+  const NBSP = "\u00A0";
+
+  const NAG_MAP = {
+    1: "!", 2: "?", 3: "‼", 4: "⁇", 5: "⁉", 6: "⁈",
+    13: "→", 14: "↑", 15: "⇆", 16: "⇄",
+    17: "⟂", 18: "∞", 19: "⟳", 20: "⟲",
+    36: "⩲", 37: "⩱", 38: "±", 39: "∓",
+    40: "+=", 41: "=+", 42: "±", 43: "∓",
+    44: "⨀", 45: "⨁"
+  };
+
+  const EVAL_MAP = {
+    "=": "=",
+    "+/=": "⩲",
+    "=/+": "⩱",
+    "+/-": "±",
+    "+/−": "±",
+    "-/+": "∓",
+    "−/+": "∓",
+    "+-": "+−",
+    "+−": "+−",
+    "-+": "−+",
+    "−+": "−+",
+    "∞": "∞",
+    "=/∞": "⯹"
+  };
+
+  function normalizeResult(r) {
+    return r ? r.replace(/1\/2-1\/2/g, "½-½") : "";
   }
 
-  const {
-    PIECE_THEME_URL,
-    SAN_CORE_REGEX,
-    RESULT_REGEX,
-    MOVE_NUMBER_REGEX,
-    NBSP,
-    NAG_MAP,
-    EVAL_MAP,
-    normalizeResult,
-    extractYear,
-    flipName,
-    normalizeFigurines,
-    appendText,
-    makeCastlingUnbreakable
-  } = PGNCore;
+  function extractYear(d) {
+    if (!d) return "";
+    let p = d.split(".");
+    return /^\d{4}$/.test(p[0]) ? p[0] : "";
+  }
+
+  function flipName(n) {
+    if (!n) return "";
+    let i = n.indexOf(",");
+    return i === -1
+      ? n.trim()
+      : n.slice(i + 1).trim() + " " + n.slice(0, i).trim();
+  }
+
+  function normalizeFigurines(text) {
+    return text
+      .replace(/♔/g, "K")
+      .replace(/♕/g, "Q")
+      .replace(/♖/g, "R")
+      .replace(/♗/g, "B")
+      .replace(/♘/g, "N");
+  }
+
+  function appendText(el, txt) {
+    if (txt) el.appendChild(document.createTextNode(txt));
+  }
+
+  function makeCastlingUnbreakable(s) {
+    return s
+      .replace(/0-0-0|O-O-O/g, m => m[0] + "\u2011" + m[2] + "\u2011" + m[4])
+      .replace(/0-0|O-O/g, m => m[0] + "\u2011" + m[2]);
+  }
 
   // --------------------------------------------------------------------------
   // ReaderPGNView
@@ -135,6 +193,9 @@
       return H;
     }
 
+    // ---------------------------------------------------------
+    // CREATE BOARD — now with SMOOTH ANIMATION
+    // ---------------------------------------------------------
     createReaderBoard() {
       this.boardDiv = document.createElement("div");
       this.boardDiv.className = "pgn-reader-board";
@@ -144,7 +205,13 @@
         ReaderBoard.board = Chessboard(this.boardDiv, {
           position: "start",
           draggable: false,
-          pieceTheme: PIECE_THEME_URL
+          pieceTheme: PIECE_THEME_URL,
+
+          // NEW → smooth animations
+          moveSpeed: 200,
+          snapSpeed: 20,
+          snapbackSpeed: 20,
+          appearSpeed: 150
         });
       }, 0);
     }
@@ -285,10 +352,7 @@
 
         if (/\s/.test(ch)) {
           while (i < t.length && /\s/.test(t[i])) i++;
-          this.ensure(
-            ctx,
-            ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-          );
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, " ");
           continue;
         }
@@ -330,7 +394,11 @@
         }
 
         let s = i;
-        while (i < t.length && !/\s/.test(t[i]) && !"(){}".includes(t[i]))
+        while (
+          i < t.length &&
+          !/\s/.test(t[i]) &&
+          !"(){}".includes(t[i])
+        )
           i++;
 
         let tok = t.substring(s, i);
@@ -347,10 +415,7 @@
         if (RESULT_REGEX.test(tok)) {
           if (this.finalResultPrinted) continue;
           this.finalResultPrinted = true;
-          this.ensure(
-            ctx,
-            ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-          );
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, tok + " ");
           continue;
         }
@@ -364,10 +429,7 @@
 
         if (!isSAN) {
           if (EVAL_MAP[tok]) {
-            this.ensure(
-              ctx,
-              ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-            );
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, EVAL_MAP[tok] + " ");
             continue;
           }
@@ -375,10 +437,7 @@
           if (tok[0] === "$") {
             let code = +tok.slice(1);
             if (NAG_MAP[code]) {
-              this.ensure(
-                ctx,
-                ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-              );
+              this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
               appendText(ctx.container, NAG_MAP[code] + " ");
             }
             continue;
@@ -397,19 +456,13 @@
               ctx.lastWasInterrupt = false;
             }
           } else {
-            this.ensure(
-              ctx,
-              ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-            );
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, tok + " ");
           }
           continue;
         }
 
-        this.ensure(
-          ctx,
-          ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-        );
+        this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
         let m = this.handleSAN(tok, ctx);
         if (!m) appendText(ctx.container, makeCastlingUnbreakable(tok) + " ");
       }
@@ -450,7 +503,10 @@
       const fen = span.dataset.fen;
       if (!fen || !this.board) return;
 
-      this.board.position(fen, true);
+      // ---------------------------------------------------------
+      // NEW: SMOOTH animation (remove true → allow animation)
+      // ---------------------------------------------------------
+      this.board.position(fen);  
 
       this.moveSpans.forEach(s =>
         s.classList.remove("reader-move-active")
@@ -527,6 +583,173 @@
   };
 
   // --------------------------------------------------------------------------
+  // CSS (mobile-first, desktop override WITHOUT reader header)
+  // --------------------------------------------------------------------------
+  const style = document.createElement("style");
+  style.textContent = `
+
+/* ----------------------------------------------------
+   BASE (MOBILE-FIRST)
+---------------------------------------------------- */
+
+.pgn-reader-block {
+  background: #fff;
+  margin-bottom: 2rem;
+}
+
+.pgn-reader-header {
+  position: static;
+  background: #fff;
+  padding-bottom: 0.4rem;
+}
+
+/* MOBILE: stacked layout */
+.pgn-reader-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+/* MOBILE: reader board, centered */
+.pgn-reader-left {
+  position: sticky;
+  top: 0rem;
+  background: #fff;
+  z-index: 70;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 0.3rem 0;
+}
+
+.pgn-reader-board {
+  width: 320px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #fff;
+  z-index: 72;
+}
+
+.pgn-reader-buttons {
+  width: 320px;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0.2rem auto 0 auto;
+  background: #fff;
+  z-index: 72;
+}
+
+.pgn-reader-btn {
+  font-size: 1.2rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Moves area (mobile) */
+.pgn-reader-right {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0.5rem;
+}
+
+/* Typography */
+.pgn-mainline {
+  font-weight: 600;
+  line-height: 1.7;
+  font-size: 1rem;
+}
+
+.pgn-variation {
+  font-weight: 400;
+  line-height: 1.7;
+  font-size: 1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pgn-comment {
+  font-style: italic;
+  margin: 0.3rem 0;
+  padding: 0;
+  border: none;
+}
+
+.reader-move-active {
+  background: #ffe38a;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+/* ----------------------------------------------------
+   DESKTOP (>=768px)
+---------------------------------------------------- */
+@media (min-width: 768px) {
+
+  .pgn-reader-header {
+    position: static;
+    top: auto;
+    z-index: auto;
+  }
+
+  .pgn-reader-cols {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 2rem;
+  }
+
+  .pgn-reader-left {
+    top: 6rem;
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .pgn-reader-board,
+  .pgn-reader-buttons {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .pgn-reader-right {
+    height: 350px;
+    overflow-y: auto;
+  }
+
+  /* Standard spacing */
+  .pgn-reader-right * {
+    line-height: 1.55;
+    margin-top: 0;
+    margin-bottom: 0.35rem;
+    padding: 0;
+  }
+
+  .pgn-reader-right .pgn-comment {
+    margin: 0.35rem 0;
+    line-height: 1.5;
+  }
+
+  /* BOLD mainline moves */
+  .pgn-mainline .reader-move {
+    font-weight: 600;
+  }
+
+  /* Variation moves normal */
+  .pgn-variation .reader-move {
+    font-weight: 400;
+  }
+
+}
+`;
+  document.head.appendChild(style);
+
+  // --------------------------------------------------------------------------
   // DOM Ready
   // --------------------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", () => {
@@ -536,4 +759,5 @@
     els.forEach(el => new ReaderPGNView(el));
     ReaderBoard.activate(document);
   });
+
 })();
