@@ -1,196 +1,79 @@
-/* ============================================================================
-   pgn.css — unified styling for pgn.js and pgn-reader.js
-   Works identically for:
-   - <pgn> (static renderer)
-   - <pgn-reader> (interactive renderer)
-============================================================================ */
+/* ============================================================
+   PGN SHARED BASE STYLES
+   Used by BOTH <pgn> and <pgn-reader>
+   Mobile-first + desktop refinements
+============================================================ */
 
-
-/* ----------------------------------------------------
-   GENERAL BASE STYLE (shared by both)
----------------------------------------------------- */
-
-.pgn-block,
-.pgn-reader-block {
-  background: #fff;
-  margin-bottom: 2rem;
-  font-size: 1rem;
-  line-height: 1.55;
-  color: #111;
-}
-
-/* Headers */
-.pgn-header,
-.pgn-reader-header {
-  font-weight: 600;
-  margin-bottom: 0.7rem;
-  line-height: 1.4;
-}
-
-
-/* ----------------------------------------------------
-   TEXT ELEMENTS
----------------------------------------------------- */
-
-/* Main line container */
-.pgn-mainline {
-  font-weight: 600;         /* ✔ Bold move numbers */
-  margin: 0;
-  padding: 0;
-}
-
-/* Variation container */
-.pgn-variation {
-  font-weight: 400;         /* ✔ Normal */
-  margin: 0;
-  padding: 0;
-}
-
-/* Individual move spans inside any line */
-.pgn-move {
-  font-weight: inherit;     /* ✔ Follows container: bold in main line, normal in variation */
-  cursor: pointer;
-}
-
-/* Comments */
+.pgn-mainline,
+.pgn-variation,
 .pgn-comment {
-  margin: 0.35rem 0;
+  line-height: 1.55;
+  margin: 0 0 0.35rem 0;
   padding: 0;
+  border: none;
+  font-size: 1rem;
 }
 
+/* Bold everything for mainline */
+.pgn-mainline,
+.pgn-mainline .pgn-move {
+  font-weight: 600;
+}
 
-/* ----------------------------------------------------
-   INTERACTIVE READER MOVE HIGHLIGHT
----------------------------------------------------- */
+/* Variations normal */
+.pgn-variation,
+.pgn-variation .pgn-move {
+  font-weight: 400;
+}
 
+/* Italic comments */
+.pgn-comment {
+  font-style: italic;
+}
+
+/* Highlighted move (only for pgn-reader, but harmless here) */
 .reader-move-active {
   background: #ffe38a;
   border-radius: 4px;
   padding: 2px 4px;
 }
 
+/* ============================================================
+   STATIC DIAGRAMS (<pgn> ONLY)
+============================================================ */
 
-/* ----------------------------------------------------
-   MOBILE-FIRST (shared)
----------------------------------------------------- */
-
-.pgn-reader-cols {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-/* Reader-only left column (mobile sticky board) */
-.pgn-reader-left {
-  position: sticky;
-  top: 0;
-  background: #fff;
-  z-index: 70;
-  width: 100%;
-  padding: 0.3rem 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* Board */
-.pgn-reader-board {
-  width: 320px;
+.pgn-diagram {
+  width: 350px;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0.5rem 0;
   background: #fff;
-  z-index: 72;
 }
 
-/* Buttons under the board */
-.pgn-reader-buttons {
-  width: 320px;
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin: 0.2rem auto 0;
-  background: #fff;
-  z-index: 72;
+/* Make sure chessboard squares are visible */
+.pgn-diagram .board-b72b1,
+.pgn-diagram .chessboard-63f37 {
+  max-width: 100%;
 }
 
-.pgn-reader-btn {
-  font-size: 1.2rem;
-  padding: 0.2rem 0.6rem;
-  cursor: pointer;
-  background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+/* Header inside pgn blog block */
+.pgn-blog-block h4 {
+  margin: 0 0 0.7rem 0;
+  line-height: 1.4;
+  font-weight: 600;
 }
 
-/* Moves column (mobile) */
-.pgn-reader-right {
-  max-height: none;
-  overflow-y: visible;
-  padding-right: 0.5rem;
+/* Spacing inside pgn */
+.pgn-blog-block {
+  margin-bottom: 2rem;
 }
 
-
-/* ----------------------------------------------------
-   DESKTOP (shared)
----------------------------------------------------- */
+/* ============================================================
+   DESKTOP OVERRIDES
+============================================================ */
 @media (min-width: 768px) {
-
-  /* pgn-reader layout */
-  .pgn-reader-cols {
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    gap: 2rem;
-  }
-
-  .pgn-reader-left {
-    top: 6rem;
-    align-items: flex-start;
-    padding: 0;
-  }
-
-  .pgn-reader-board,
-  .pgn-reader-buttons {
-    margin-left: 0;
-    margin-right: 0;
-  }
-
-  .pgn-reader-right {
-    height: 350px;
-    overflow-y: auto;
-  }
-
-  /* ------------------------------------------------
-     NORMALIZE ALL TEXT SPACING FOR BOTH RENDERERS
-     ------------------------------------------------ */
-  .pgn-reader-right *,
-  .pgn-block p,
-  .pgn-moves *,
-  .pgn-variation *,
-  .pgn-mainline * {
-    line-height: 1.55;
-    margin-top: 0;
-    margin-bottom: 0.35rem;
-    padding: 0;
-  }
-
-  /* Comments slightly different for readability */
-  .pgn-comment {
-    margin: 0.35rem 0;
-    line-height: 1.5;
-  }
-
-  /* ------------------------------------------------
-     BOLD MAINLINE — FOR BOTH RENDERERS
-     ------------------------------------------------ */
-  .pgn-mainline .pgn-move,
-  .pgn-mainline {
-    font-weight: 600;
-  }
-
-  /* Variation stays normal */
-  .pgn-variation .pgn-move,
+  .pgn-mainline,
   .pgn-variation {
-    font-weight: 400;
+    line-height: 1.55;
+    margin: 0 0 0.35rem 0;
   }
 }

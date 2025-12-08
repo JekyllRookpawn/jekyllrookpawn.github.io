@@ -1,22 +1,8 @@
-// ============================================================================
-// pgn.js — static blog-style PGN renderer
-// Shares parser logic with pgn-reader.js via pgn-core.js
-// ============================================================================
-
 (function () {
   "use strict";
 
-  if (typeof Chess === "undefined") {
-    console.warn("pgn.js: chess.js missing");
-    return;
-  }
-  if (typeof window.PGNCore === "undefined") {
-    console.warn("pgn.js: pgn-core.js missing");
-    return;
-  }
-
-  // Import from PGNCore
   const {
+    PIECE_THEME_URL,
     SAN_CORE_REGEX,
     RESULT_REGEX,
     MOVE_NUMBER_REGEX,
@@ -28,14 +14,15 @@
     flipName,
     normalizeFigurines,
     appendText,
-    makeCastlingUnbreakable
+    makeCastlingUnbreakable,
+    createDiagram
   } = window.PGNCore;
 
   class PGNGameView {
     constructor(src) {
       this.sourceEl = src;
       this.wrapper = document.createElement("div");
-      this.wrapper.className = "pgn-block";
+      this.wrapper.className = "pgn-blog-block";
       this.finalResultPrinted = false;
       this.build();
       this.applyFigurines();
@@ -79,19 +66,13 @@
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      this.buildHeader(head);
-
-      // Single flat wrapper
-      this.movesWrapper = document.createElement("div");
-      this.movesWrapper.className = "pgn-moves";
-      this.wrapper.appendChild(this.movesWrapper);
-
+      this.header(head);
       this.parse(movetext);
 
       this.sourceEl.replaceWith(this.wrapper);
     }
 
-    buildHeader(h) {
+    header(h) {
       let W =
           (h.WhiteTitle ? h.WhiteTitle + " " : "") +
           flipName(h.White || "") +
@@ -104,7 +85,6 @@
         line = (h.Event || "") + (Y ? ", " + Y : "");
 
       let H = document.createElement("h4");
-      H.className = "pgn-header";
       H.appendChild(document.createTextNode(W + " – " + B));
       H.appendChild(document.createElement("br"));
       H.appendChild(document.createTextNode(line));
@@ -115,7 +95,7 @@
       if (!ctx.container) {
         let p = document.createElement("p");
         p.className = cls;
-        this.movesWrapper.appendChild(p);
+        this.wrapper.appendChild(p);
         ctx.container = p;
       }
     }
@@ -133,23 +113,37 @@
         let k = j;
         while (k < text.length && /\s/.test(text[k])) k++;
         let next = "";
-        while (
-          k < text.length &&
+        while (k < text.length &&
           !/\s/.test(text[k]) &&
-          !"(){}".includes(text[k])
-        )
+          !"(){}".includes(text[k])) {
           next += text[k++];
+        }
         if (RESULT_REGEX.test(next)) {
-          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "");
+          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "").trim();
         }
       }
 
-      let p = document.createElement("p");
-      p.className = "pgn-comment";
-      appendText(p, raw);
-      this.movesWrapper.appendChild(p);
+      let parts = raw.split("[D]");
+      for (let idx = 0; idx < parts.length; idx++) {
+        let c = parts[idx].trim();
+        if (ctx.type === "variation") {
+          this.ensure(ctx, "pgn-variation");
+          if (c) appendText(ctx.container, " " + c);
+        } else {
+          if (c) {
+            let p = document.createElement("p");
+            p.className = "pgn-comment";
+            appendText(p, c);
+            this.wrapper.appendChild(p);
+          }
+          ctx.container = null;
+        }
 
-      ctx.container = null;
+        if (idx < parts.length - 1) {
+          createDiagram(this.wrapper, ctx.chess.fen());
+        }
+      }
+
       ctx.lastWasInterrupt = true;
       return j;
     }
@@ -167,8 +161,15 @@
         white = ply % 2 === 0,
         num = Math.floor(ply / 2) + 1;
 
-      if (white) appendText(ctx.container, num + "." + NBSP);
-      else if (ctx.lastWasInterrupt) appendText(ctx.container, num + "..." + NBSP);
+      if (ctx.type === "main") {
+        if (white) appendText(ctx.container, num + "." + NBSP);
+        else if (ctx.lastWasInterrupt)
+          appendText(ctx.container, num + "..." + NBSP);
+      } else {
+        if (white) appendText(ctx.container, num + "." + NBSP);
+        else if (ctx.lastWasInterrupt)
+          appendText(ctx.container, num + "..." + NBSP);
+      }
 
       ctx.prevFen = ctx.chess.fen();
       ctx.prevHistoryLen = ply;
@@ -203,7 +204,7 @@
         },
         i = 0;
 
-      for (; i < t.length; ) {
+      for (; i < t.length;) {
         let ch = t[i];
 
         if (/\s/.test(ch)) {
@@ -216,7 +217,9 @@
         if (ch === "(") {
           i++;
           let fen = ctx.prevFen || ctx.chess.fen(),
-            len = ctx.prevHistoryLen;
+            len = typeof ctx.prevHistoryLen === "number"
+              ? ctx.prevHistoryLen
+              : ctx.chess.history().length;
           ctx = {
             type: "variation",
             chess: new Chess(fen),
@@ -233,9 +236,11 @@
 
         if (ch === ")") {
           i++;
-          ctx = ctx.parent;
-          ctx.lastWasInterrupt = true;
-          ctx.container = null;
+          if (ctx.parent) {
+            ctx = ctx.parent;
+            ctx.lastWasInterrupt = true;
+            ctx.container = null;
+          }
           continue;
         }
 
@@ -245,20 +250,29 @@
         }
 
         let s = i;
-        while (i < t.length && !"(){}".includes(t[i]) && !/\s/.test(t[i])) i++;
+        while (
+          i < t.length &&
+          !/\s/.test(t[i]) &&
+          !"(){}".includes(t[i])
+        )
+          i++;
 
         let tok = t.substring(s, i);
         if (!tok) continue;
 
         if (/^\[%.*]$/.test(tok)) continue;
+
         if (tok === "[D]") {
+          createDiagram(this.wrapper, ctx.chess.fen());
           ctx.lastWasInterrupt = true;
           ctx.container = null;
           continue;
         }
 
         if (RESULT_REGEX.test(tok)) {
-          this.ensure(ctx, "pgn-mainline");
+          if (this.finalResultPrinted) continue;
+          this.finalResultPrinted = true;
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, tok + " ");
           continue;
         }
@@ -276,16 +290,15 @@
           }
 
           if (tok[0] === "$") {
-            let nag = NAG_MAP[+tok.slice(1)];
-            if (nag) {
+            let code = +tok.slice(1);
+            if (NAG_MAP[code]) {
               this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
-              appendText(ctx.container, nag + " ");
+              appendText(ctx.container, NAG_MAP[code] + " ");
             }
             continue;
           }
 
-          let isWord = /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok);
-          if (isWord) {
+          if (/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok)) {
             if (ctx.type === "variation") {
               this.ensure(ctx, "pgn-variation");
               appendText(ctx.container, " " + tok);
@@ -293,7 +306,7 @@
               let p = document.createElement("p");
               p.className = "pgn-comment";
               appendText(p, tok);
-              this.movesWrapper.appendChild(p);
+              this.wrapper.appendChild(p);
               ctx.container = null;
               ctx.lastWasInterrupt = false;
             }
@@ -311,11 +324,18 @@
     }
 
     applyFigurines() {
-      const map = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘" };
+      const map = {
+        K: "♔",
+        Q: "♕",
+        R: "♖",
+        B: "♗",
+        N: "♘"
+      };
+
       this.wrapper.querySelectorAll(".pgn-move").forEach(span => {
-        let m = span.textContent.match(/^([KQRBN])(.+?)\s*$/);
+        let m = span.textContent.match(/^([KQRBN])(.+?)(\s*)$/);
         if (m) {
-          span.textContent = map[m[1]] + m[2] + " ";
+          span.textContent = map[m[1]] + m[2] + (m[3] || "");
         }
       });
     }
@@ -323,14 +343,20 @@
 
   class PGNRenderer {
     static renderAll(root) {
-      (root || document).querySelectorAll("pgn").forEach(el => new PGNGameView(el));
+      (root || document).querySelectorAll("pgn").forEach(el => {
+        new PGNGameView(el);
+      });
     }
 
     static init() {
+      if (typeof Chess === "undefined") {
+        console.warn("pgn.js: chess.js missing");
+        return;
+      }
       PGNRenderer.renderAll(document);
       window.PGNRenderer = {
-        run(r) {
-          PGNRenderer.renderAll(r || document.body);
+        run(root) {
+          PGNRenderer.renderAll(root || document.body);
         }
       };
     }
