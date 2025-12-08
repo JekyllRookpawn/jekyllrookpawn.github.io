@@ -1,65 +1,80 @@
 /* ============================================================================
-   pgn.css
-   Shared styles for:
-   - <pgn> rendered by pgn.js
-   - <pgn-reader> rendered by pgn-reader.js
-   ========================================================================== */
+   pgn.css — unified styling for pgn.js and pgn-reader.js
+   Works identically for:
+   - <pgn> (static renderer)
+   - <pgn-reader> (interactive renderer)
+============================================================================ */
+
 
 /* ----------------------------------------------------
-   Generic blog PGN (<pgn>)
+   GENERAL BASE STYLE (shared by both)
 ---------------------------------------------------- */
 
-.pgn-blog-block {
-  background: #fff;
-  margin-bottom: 2rem;
-}
-
-/* Moves + comments: match reader rhythm */
-.pgn-blog-block .pgn-mainline,
-.pgn-blog-block .pgn-variation,
-.pgn-blog-block .pgn-comment {
-  line-height: 1.55;
-  margin-top: 0;
-  margin-bottom: 0.35rem;
-  padding: 0;
-}
-
-.pgn-blog-block .pgn-comment {
-  margin: 0.35rem 0;
-  line-height: 1.5;
-}
-
-/* Bold mainline, normal-weight variations for <pgn> */
-.pgn-blog-block .pgn-mainline {
-  font-weight: 600;
-}
-
-.pgn-blog-block .pgn-variation .pgn-move {
-  font-weight: 400;
-}
-
-/* Simple diagram block inside <pgn> */
-.pgn-diagram {
-  margin: 0.75rem 0;
-}
-
-/* ----------------------------------------------------
-   Reader layout (<pgn-reader>)
-   Mobile-first
----------------------------------------------------- */
-
+.pgn-block,
 .pgn-reader-block {
   background: #fff;
   margin-bottom: 2rem;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: #111;
 }
 
+/* Headers */
+.pgn-header,
 .pgn-reader-header {
-  position: static;
-  background: #fff;
-  padding-bottom: 0.4rem;
+  font-weight: 600;
+  margin-bottom: 0.7rem;
+  line-height: 1.4;
 }
 
-/* MOBILE: stacked layout */
+
+/* ----------------------------------------------------
+   TEXT ELEMENTS
+---------------------------------------------------- */
+
+/* Main line container */
+.pgn-mainline {
+  font-weight: 600;         /* ✔ Bold move numbers */
+  margin: 0;
+  padding: 0;
+}
+
+/* Variation container */
+.pgn-variation {
+  font-weight: 400;         /* ✔ Normal */
+  margin: 0;
+  padding: 0;
+}
+
+/* Individual move spans inside any line */
+.pgn-move {
+  font-weight: inherit;     /* ✔ Follows container: bold in main line, normal in variation */
+  cursor: pointer;
+}
+
+/* Comments */
+.pgn-comment {
+  font-style: italic;
+  margin: 0.35rem 0;
+  padding: 0;
+}
+
+
+/* ----------------------------------------------------
+   INTERACTIVE READER MOVE HIGHLIGHT
+---------------------------------------------------- */
+
+.reader-move-active {
+  background: #ffe38a;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+
+/* ----------------------------------------------------
+   MOBILE-FIRST (shared)
+---------------------------------------------------- */
+
 .pgn-reader-cols {
   display: flex;
   flex-direction: column;
@@ -67,20 +82,20 @@
   margin-top: 1rem;
 }
 
-/* MOBILE: sticky board, centered */
+/* Reader-only left column (mobile sticky board) */
 .pgn-reader-left {
   position: sticky;
-  top: 0rem;
+  top: 0;
   background: #fff;
   z-index: 70;
   width: 100%;
+  padding: 0.3rem 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 0;
-  padding: 0.3rem 0;
 }
 
+/* Board */
 .pgn-reader-board {
   width: 320px;
   max-width: 100%;
@@ -89,12 +104,13 @@
   z-index: 72;
 }
 
+/* Buttons under the board */
 .pgn-reader-buttons {
   width: 320px;
   display: flex;
   justify-content: center;
   gap: 1rem;
-  margin: 0.2rem auto 0 auto;
+  margin: 0.2rem auto 0;
   background: #fff;
   z-index: 72;
 }
@@ -108,51 +124,20 @@
   border-radius: 4px;
 }
 
-/* Moves area (mobile) */
+/* Moves column (mobile) */
 .pgn-reader-right {
   max-height: none;
   overflow-y: visible;
   padding-right: 0.5rem;
 }
 
-/* Typography for reader moves/comments */
-.pgn-mainline {
-  line-height: 1.7;
-  font-size: 1rem;
-}
-
-.pgn-variation {
-  line-height: 1.7;
-  font-size: 1rem;
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-
-.pgn-comment {
-  margin: 0.3rem 0;
-  padding: 0;
-  border: none;
-}
-
-/* Active move highlight in reader */
-.reader-move-active {
-  background: #ffe38a;
-  border-radius: 4px;
-  padding: 2px 4px;
-}
 
 /* ----------------------------------------------------
-   DESKTOP (>=768px)
+   DESKTOP (shared)
 ---------------------------------------------------- */
 @media (min-width: 768px) {
 
-  .pgn-reader-header {
-    position: static;
-    top: auto;
-    z-index: auto;
-  }
-
+  /* pgn-reader layout */
   .pgn-reader-cols {
     display: grid;
     grid-template-columns: 340px 1fr;
@@ -176,40 +161,37 @@
     overflow-y: auto;
   }
 
-  /* Standard spacing in the reader move column */
-  .pgn-reader-right * {
+  /* ------------------------------------------------
+     NORMALIZE ALL TEXT SPACING FOR BOTH RENDERERS
+     ------------------------------------------------ */
+  .pgn-reader-right *,
+  .pgn-block p,
+  .pgn-moves *,
+  .pgn-variation *,
+  .pgn-mainline * {
     line-height: 1.55;
     margin-top: 0;
     margin-bottom: 0.35rem;
     padding: 0;
   }
 
-  .pgn-reader-right .pgn-comment {
+  /* Comments slightly different for readability */
+  .pgn-comment {
     margin: 0.35rem 0;
     line-height: 1.5;
   }
 
-  /* Bold mainline moves, normal variations for reader */
-  .pgn-mainline .reader-move {
+  /* ------------------------------------------------
+     BOLD MAINLINE — FOR BOTH RENDERERS
+     ------------------------------------------------ */
+  .pgn-mainline .pgn-move,
+  .pgn-mainline {
     font-weight: 600;
   }
 
-  .pgn-variation .reader-move {
+  /* Variation stays normal */
+  .pgn-variation .pgn-move,
+  .pgn-variation {
     font-weight: 400;
   }
-}
-
-/* 1. EVERYTHING inside mainline is bold (covers move numbers + SAN moves) */
-.pgn-mainline {
-  font-weight: 600;
-}
-
-/* 2. Strengthen SAN moves in <pgn> */
-.pgn-mainline .pgn-move {
-  font-weight: 600;
-}
-
-/* 3. Strengthen SAN moves in <pgn-reader> */
-.pgn-mainline .reader-move {
-  font-weight: 600;
 }

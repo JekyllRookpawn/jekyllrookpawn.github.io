@@ -1,8 +1,6 @@
 // ============================================================================
-// pgn.js
-// Renders <pgn> elements as blog blocks with diagrams ([D]), comments,
-// variations, figurines, and bold mainline moves.
-// Shares core helpers with pgn-reader.js via pgn-core.js
+// pgn.js — static blog-style PGN renderer
+// Shares parser logic with pgn-reader.js via pgn-core.js
 // ============================================================================
 
 (function () {
@@ -12,14 +10,13 @@
     console.warn("pgn.js: chess.js missing");
     return;
   }
-
-  if (typeof PGNCore === "undefined") {
-    console.warn("pgn.js: PGNCore (pgn-core.js) missing");
+  if (typeof window.PGNCore === "undefined") {
+    console.warn("pgn.js: pgn-core.js missing");
     return;
   }
 
+  // Import from PGNCore
   const {
-    PIECE_THEME_URL,
     SAN_CORE_REGEX,
     RESULT_REGEX,
     MOVE_NUMBER_REGEX,
@@ -32,39 +29,13 @@
     normalizeFigurines,
     appendText,
     makeCastlingUnbreakable
-  } = PGNCore;
-
-  let diagramCounter = 0;
-
-  function createDiagram(w, fen) {
-    if (typeof Chessboard === "undefined") {
-      console.warn("pgn.js: chessboard.js missing for [D] diagram");
-      return;
-    }
-    let id = "pgn-diagram-" + diagramCounter++,
-      d = document.createElement("div");
-    d.className = "pgn-diagram";
-    d.id = id;
-    d.style.width = "350px";
-    d.style.maxWidth = "100%";
-    w.appendChild(d);
-    setTimeout(() => {
-      let x = document.getElementById(id);
-      if (x) {
-        Chessboard(x, {
-          position: fen,
-          draggable: false,
-          pieceTheme: PIECE_THEME_URL
-        });
-      }
-    }, 0);
-  }
+  } = window.PGNCore;
 
   class PGNGameView {
     constructor(src) {
       this.sourceEl = src;
       this.wrapper = document.createElement("div");
-      this.wrapper.className = "pgn-blog-block";
+      this.wrapper.className = "pgn-block";
       this.finalResultPrinted = false;
       this.build();
       this.applyFigurines();
@@ -90,10 +61,7 @@
         }
       }
 
-      return {
-        headers: H,
-        moveText: M.join(" ").replace(/\s+/g, " ").trim()
-      };
+      return { headers: H, moveText: M.join(" ").replace(/\s+/g, " ").trim() };
     }
 
     build() {
@@ -111,13 +79,19 @@
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      this.header(head);
+      this.buildHeader(head);
+
+      // Single flat wrapper
+      this.movesWrapper = document.createElement("div");
+      this.movesWrapper.className = "pgn-moves";
+      this.wrapper.appendChild(this.movesWrapper);
+
       this.parse(movetext);
 
       this.sourceEl.replaceWith(this.wrapper);
     }
 
-    header(h) {
+    buildHeader(h) {
       let W =
           (h.WhiteTitle ? h.WhiteTitle + " " : "") +
           flipName(h.White || "") +
@@ -130,6 +104,7 @@
         line = (h.Event || "") + (Y ? ", " + Y : "");
 
       let H = document.createElement("h4");
+      H.className = "pgn-header";
       H.appendChild(document.createTextNode(W + " – " + B));
       H.appendChild(document.createElement("br"));
       H.appendChild(document.createTextNode(line));
@@ -140,7 +115,7 @@
       if (!ctx.container) {
         let p = document.createElement("p");
         p.className = cls;
-        this.wrapper.appendChild(p);
+        this.movesWrapper.appendChild(p);
         ctx.container = p;
       }
     }
@@ -165,31 +140,16 @@
         )
           next += text[k++];
         if (RESULT_REGEX.test(next)) {
-          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "").trim();
+          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "");
         }
       }
 
-      let parts = raw.split("[D]");
-      for (let idx = 0; idx < parts.length; idx++) {
-        let c = parts[idx].trim();
-        if (ctx.type === "variation") {
-          this.ensure(ctx, "pgn-variation");
-          if (c) appendText(ctx.container, " " + c);
-        } else {
-          if (c) {
-            let p = document.createElement("p");
-            p.className = "pgn-comment";
-            appendText(p, c);
-            this.wrapper.appendChild(p);
-          }
-          ctx.container = null;
-        }
+      let p = document.createElement("p");
+      p.className = "pgn-comment";
+      appendText(p, raw);
+      this.movesWrapper.appendChild(p);
 
-        if (idx < parts.length - 1) {
-          createDiagram(this.wrapper, ctx.chess.fen());
-        }
-      }
-
+      ctx.container = null;
       ctx.lastWasInterrupt = true;
       return j;
     }
@@ -207,15 +167,8 @@
         white = ply % 2 === 0,
         num = Math.floor(ply / 2) + 1;
 
-      if (ctx.type === "main") {
-        if (white) appendText(ctx.container, num + "." + NBSP);
-        else if (ctx.lastWasInterrupt)
-          appendText(ctx.container, num + "..." + NBSP);
-      } else {
-        if (white) appendText(ctx.container, num + "." + NBSP);
-        else if (ctx.lastWasInterrupt)
-          appendText(ctx.container, num + "..." + NBSP);
-      }
+      if (white) appendText(ctx.container, num + "." + NBSP);
+      else if (ctx.lastWasInterrupt) appendText(ctx.container, num + "..." + NBSP);
 
       ctx.prevFen = ctx.chess.fen();
       ctx.prevHistoryLen = ply;
@@ -230,8 +183,6 @@
 
       let span = document.createElement("span");
       span.className = "pgn-move";
-      span.dataset.fen = ctx.chess.fen();
-      span.dataset.mainline = ctx.type === "main" ? "1" : "0";
       span.textContent = makeCastlingUnbreakable(tok) + " ";
       ctx.container.appendChild(span);
 
@@ -257,10 +208,7 @@
 
         if (/\s/.test(ch)) {
           while (i < t.length && /\s/.test(t[i])) i++;
-          this.ensure(
-            ctx,
-            ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-          );
+          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
           appendText(ctx.container, " ");
           continue;
         }
@@ -268,10 +216,7 @@
         if (ch === "(") {
           i++;
           let fen = ctx.prevFen || ctx.chess.fen(),
-            len =
-              typeof ctx.prevHistoryLen === "number"
-                ? ctx.prevHistoryLen
-                : ctx.chess.history().length;
+            len = ctx.prevHistoryLen;
           ctx = {
             type: "variation",
             chess: new Chess(fen),
@@ -288,11 +233,9 @@
 
         if (ch === ")") {
           i++;
-          if (ctx.parent) {
-            ctx = ctx.parent;
-            ctx.lastWasInterrupt = true;
-            ctx.container = null;
-          }
+          ctx = ctx.parent;
+          ctx.lastWasInterrupt = true;
+          ctx.container = null;
           continue;
         }
 
@@ -302,62 +245,47 @@
         }
 
         let s = i;
-        while (i < t.length && !/\s/.test(t[i]) && !"(){}".includes(t[i]))
-          i++;
+        while (i < t.length && !"(){}".includes(t[i]) && !/\s/.test(t[i])) i++;
 
         let tok = t.substring(s, i);
         if (!tok) continue;
 
         if (/^\[%.*]$/.test(tok)) continue;
-
         if (tok === "[D]") {
-          createDiagram(this.wrapper, ctx.chess.fen());
           ctx.lastWasInterrupt = true;
           ctx.container = null;
           continue;
         }
 
         if (RESULT_REGEX.test(tok)) {
-          if (this.finalResultPrinted) continue;
-          this.finalResultPrinted = true;
-          this.ensure(
-            ctx,
-            ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-          );
+          this.ensure(ctx, "pgn-mainline");
           appendText(ctx.container, tok + " ");
           continue;
         }
 
         if (MOVE_NUMBER_REGEX.test(tok)) continue;
 
-        let core = tok
-            .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
-            .replace(/0/g, "O"),
+        let core = tok.replace(/[^a-hKQRBN0-9=O0-]+$/g, "").replace(/0/g, "O"),
           isSAN = PGNGameView.isSANCore(core);
 
         if (!isSAN) {
           if (EVAL_MAP[tok]) {
-            this.ensure(
-              ctx,
-              ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-            );
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, EVAL_MAP[tok] + " ");
             continue;
           }
 
           if (tok[0] === "$") {
-            let code = +tok.slice(1);
-            if (NAG_MAP[code]) {
-              this.ensure(
-                ctx,
-                ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-              );
-              appendText(ctx.container, NAG_MAP[code] + " ");
+            let nag = NAG_MAP[+tok.slice(1)];
+            if (nag) {
+              this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
+              appendText(ctx.container, nag + " ");
             }
             continue;
           }
 
-          if (/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok)) {
+          let isWord = /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok);
+          if (isWord) {
             if (ctx.type === "variation") {
               this.ensure(ctx, "pgn-variation");
               appendText(ctx.container, " " + tok);
@@ -365,50 +293,39 @@
               let p = document.createElement("p");
               p.className = "pgn-comment";
               appendText(p, tok);
-              this.wrapper.appendChild(p);
+              this.movesWrapper.appendChild(p);
               ctx.container = null;
               ctx.lastWasInterrupt = false;
             }
           } else {
-            this.ensure(
-              ctx,
-              ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-            );
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
             appendText(ctx.container, tok + " ");
           }
           continue;
         }
 
-        this.ensure(
-          ctx,
-          ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
-        );
+        this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
         let m = this.handleSAN(tok, ctx);
-        if (!m) {
-          appendText(
-            ctx.container,
-            makeCastlingUnbreakable(tok) + " "
-          );
-        }
+        if (!m) appendText(ctx.container, makeCastlingUnbreakable(tok) + " ");
       }
     }
 
     applyFigurines() {
       const map = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘" };
       this.wrapper.querySelectorAll(".pgn-move").forEach(span => {
-        let m = span.textContent.match(/^([KQRBN])(.+?)(\s*)$/);
-        if (m)
-          span.textContent = map[m[1]] + m[2] + (m[3] || "");
+        let m = span.textContent.match(/^([KQRBN])(.+?)\s*$/);
+        if (m) {
+          span.textContent = map[m[1]] + m[2] + " ";
+        }
       });
     }
   }
 
   class PGNRenderer {
-    static renderAll(r) {
-      (r || document)
-        .querySelectorAll("pgn")
-        .forEach(el => new PGNGameView(el));
+    static renderAll(root) {
+      (root || document).querySelectorAll("pgn").forEach(el => new PGNGameView(el));
     }
+
     static init() {
       PGNRenderer.renderAll(document);
       window.PGNRenderer = {
@@ -419,9 +336,7 @@
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => PGNRenderer.init());
-  } else {
-    PGNRenderer.init();
-  }
+  document.readyState === "loading"
+    ? document.addEventListener("DOMContentLoaded", () => PGNRenderer.init())
+    : PGNRenderer.init();
 })();

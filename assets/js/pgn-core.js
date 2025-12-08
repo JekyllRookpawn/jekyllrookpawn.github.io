@@ -1,7 +1,6 @@
 // ============================================================================
 // pgn-core.js
-// Shared constants + helper functions for PGN renderers
-// Used by: pgn.js and pgn-reader.js
+// Shared parsing constants + helpers for pgn.js and pgn-reader.js
 // ============================================================================
 
 (function () {
@@ -15,6 +14,7 @@
 
   const RESULT_REGEX = /^(1-0|0-1|1\/2-1\/2|½-½|\*)$/;
   const MOVE_NUMBER_REGEX = /^(\d+)(\.+)$/;
+
   const NBSP = "\u00A0";
 
   const NAG_MAP = {
@@ -60,7 +60,6 @@
       : n.slice(i + 1).trim() + " " + n.slice(0, i).trim();
   }
 
-  // Normalize figurines (♘ → N etc.) before parsing
   function normalizeFigurines(text) {
     return text
       .replace(/♔/g, "K")
@@ -80,7 +79,7 @@
       .replace(/0-0|O-O/g, m => m[0] + "\u2011" + m[2]);
   }
 
-  // Expose core API
+  // Expose everything
   window.PGNCore = {
     PIECE_THEME_URL,
     SAN_CORE_REGEX,
