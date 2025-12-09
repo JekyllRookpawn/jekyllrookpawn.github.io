@@ -2,7 +2,7 @@
 // pgn-reader.js
 // Full version with:
 // - Non-sticky header
-// - Sticky, animated board (Chessboard.js 1.0.0)
+// - Sticky, animated board (Chessboard.js 1.0.0, using defaults)
 // - Mobile: centered board, white background block (handled in pgn.css)
 // - Desktop: 2-column layout (board left, moves right — handled in pgn.css)
 // - Variation support, bold mainline, figurines, local scrolling
@@ -24,7 +24,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // Constants (mirrors pgn.js)
+  // Constants (shared with pgn.js / pgn-core.js)
   // --------------------------------------------------------------------------
   const PIECE_THEME_URL =
     "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
@@ -150,13 +150,13 @@
         needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
         movetext = needs ? M : M + (res ? " " + res : "");
 
-      // Header (non-sticky; layout is handled in CSS)
+      // Header (non-sticky; visual behaviour is in pgn.css)
       this.headerDiv = document.createElement("div");
       this.headerDiv.className = "pgn-reader-header";
       this.wrapper.appendChild(this.headerDiv);
       this.headerDiv.appendChild(this.buildHeaderContent(head));
 
-      // Two-column wrapper (CSS turns this into rows on mobile)
+      // Two-column wrapper (CSS turns into rows on mobile)
       const cols = document.createElement("div");
       cols.className = "pgn-reader-cols";
       this.wrapper.appendChild(cols);
@@ -173,7 +173,7 @@
       this.createReaderBoard();
       this.createReaderButtons();
 
-      // Parse moves & build clickable spans
+      // Parse moves
       this.parse(movetext);
 
       this.sourceEl.replaceWith(this.wrapper);
@@ -203,19 +203,13 @@
       this.boardDiv.className = "pgn-reader-board";
       this.leftCol.appendChild(this.boardDiv);
 
-      // Explicit animation speeds for Chessboard.js
-      // NOTE: draggable: true + onDragStart: () => false
-      // helps ensure animation code paths are fully active
+      // Minimal, official-style initialization.
+      // Chessboard.js 1.0.0 will use its default animation speeds.
       setTimeout(() => {
         ReaderBoard.board = Chessboard(this.boardDiv, {
           position: "start",
-          draggable: true,
-          pieceTheme: PIECE_THEME_URL,
-          moveSpeed: 200,
-          snapSpeed: 25,
-          snapbackSpeed: 50,
-          appearSpeed: 200,
-          onDragStart: () => false
+          draggable: false,
+          pieceTheme: PIECE_THEME_URL
         });
       }, 0);
     }
@@ -410,7 +404,7 @@
         if (/^\[%.*]$/.test(tok)) continue;
 
         if (tok === "[D]") {
-          // diagrams are only for <pgn>, not for reader
+          // diagrams are only for <pgn>, not for <pgn-reader>
           ctx.lastWasInterrupt = true;
           ctx.container = null;
           continue;
@@ -522,7 +516,7 @@
       const fen = span.dataset.fen;
       if (!fen || !this.board) return;
 
-      // Smooth animation: second argument = true
+      // Ask Chessboard.js to animate the transition
       this.board.position(fen, true);
 
       this.moveSpans.forEach(s =>
@@ -530,13 +524,13 @@
       );
       span.classList.add("reader-move-active");
 
-      // Track mainline index for button/keyboard navigation
+      // Track mainline index for button / keyboard nav
       if (span.dataset.mainline === "1" && this.mainlineMoves.length) {
         const mi = this.mainlineMoves.indexOf(span);
         if (mi !== -1) this.mainlineIndex = mi;
       }
 
-      // Local scrolling inside the moves column only
+      // Local scroll only inside the move list
       if (this.movesContainer) {
         const parent = this.movesContainer;
         const top =
