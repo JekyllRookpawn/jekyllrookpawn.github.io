@@ -1,17 +1,9 @@
 /* ============================================================================
    pgn.css
    FINAL unified styling for <pgn> and <pgn-reader>
-   - Mobile sticky board
-   - White background block under board (no text bleed)
-   - Desktop 2-column layout
-   - Buttons improved
-   - Bold mainline + move numbers
    ============================================================================ */
 
-/* -----------------------------------------------
-   BASE STYLES (APPLY TO BOTH <pgn> AND <pgn-reader>)
------------------------------------------------ */
-
+/* Container for a single game */
 .pgn-blog-block,
 .pgn-reader-block {
   background: #fff;
@@ -26,7 +18,7 @@
   line-height: 1.4;
 }
 
-/* Main line & variations */
+/* Main line & variation paragraphs */
 .pgn-mainline,
 .pgn-variation {
   font-size: 1rem;
@@ -35,11 +27,18 @@
   padding: 0;
 }
 
-/* Bold main line */
+/* Entire mainline bold (numbers + text) */
 .pgn-mainline {
   font-weight: 600;
 }
 
+/* 🔥 NEW: Bold ONLY the move spans inside mainline */
+.pgn-mainline .pgn-move,
+.pgn-mainline .reader-move {
+  font-weight: 600;
+}
+
+/* Variations normal */
 .pgn-variation {
   font-weight: 400;
 }
@@ -48,7 +47,6 @@
 .pgn-comment {
   margin: 0.35rem 0;
   padding: 0;
-  font-style: italic;
 }
 
 /* Moves */
@@ -57,24 +55,21 @@
   white-space: nowrap;
 }
 
-/* Static diagrams in <pgn> */
+/* Static diagrams */
 .pgn-diagram {
   width: 350px;
   max-width: 100%;
   margin: 0.75rem 0;
 }
 
-/* Active-highlighted move */
+/* Active move highlight */
 .reader-move-active {
   background: #ffe38a;
   border-radius: 4px;
   padding: 2px 4px;
 }
 
-/* -----------------------------------------------
-   BUTTONS
------------------------------------------------ */
-
+/* Buttons */
 .pgn-reader-buttons {
   display: flex;
   justify-content: center;
@@ -98,31 +93,23 @@
 }
 
 /* -----------------------------------------------
-   MOBILE (≤ 767px)
-   - Sticky board
-   - FULL white background panel to prevent text showing behind
+   MOBILE
 ----------------------------------------------- */
-
 @media (max-width: 767px) {
-
   .pgn-reader-cols {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
   }
 
-  /* ★ Critical fix: full white background block */
   .pgn-reader-left {
     position: sticky;
     top: 0;
     z-index: 70;
     background: #fff;
 
-    /* FULL TOP BACKGROUND BLOCK — prevents text peeking */
     padding-top: 1rem;
     margin-top: -1rem;
-
-    /* slight bottom padding to look natural */
     padding-bottom: 0.25rem;
 
     display: flex;
@@ -139,11 +126,9 @@
 }
 
 /* -----------------------------------------------
-   DESKTOP (≥ 768px)
+   DESKTOP
 ----------------------------------------------- */
-
 @media (min-width: 768px) {
-
   .pgn-reader-cols {
     display: grid;
     grid-template-columns: 340px 1fr;
