@@ -36,5 +36,3 @@ Lorem ipsum dolor sit amet, 7. Nc4 Be7 8. Nce5 O-O 9. Be2 cxd4 10. Qxd4 Qxd4 con
 **fen.js** converts custom `<fen>` HTML tags into visual chess diagrams. Detects `<fen>` tags and turns them into boards rendered with the **chessboard.js** library. You can type `[D]` in PGN comments to insert diagrams, and use the frontmatter `FEN:` to use a diagram as a post image on the homepage.
 
 **pgn.js** is a simple PGN → HTML renderer. It turns a `<pgn>` element containing raw PGN text into a visually formatted chess blog post layout. Fully parses movetext including move numbers, variations, and comments using **chess.js**. Translates Numeric Annotation Glyphs (NAGs) to unicode like ⟳ or ⇆. Converts `+/=` to ⩲, and `=/∞` renders as ⯹ in PGN comments.
-
-<div id="board-test" style="width: 400px; margin: 3rem auto;"></div>
