@@ -1,43 +1,37 @@
 // ============================================================================
-// pgn.js
-// Simple blog-style PGN renderer for <pgn>:
-// - Header like: "White – Black" + event, year
-// - Mainline, variations, comments, [D] static diagrams
-// - Figurine SAN input supported, re-figurines on output
-// - Shares core with pgn-reader.js via PGNCore
+// pgn.js — Static PGN blog renderer (uses PGNCore)
 // ============================================================================
 
 (function () {
   "use strict";
 
+  if (typeof Chess === "undefined") {
+    console.warn("pgn.js: chess.js missing");
+    return;
+  }
   if (!window.PGNCore) {
-    console.warn("pgn.js: PGNCore missing");
+    console.error("pgn.js: PGNCore missing");
     return;
   }
 
-  const {
-    PIECE_THEME_URL,           // currently unused here, but kept for symmetry
-    SAN_CORE_REGEX,
-    RESULT_REGEX,
-    MOVE_NUMBER_REGEX,
-    NBSP,
-    NAG_MAP,
-    EVAL_MAP,
-    normalizeResult,
-    extractYear,
-    flipName,
-    normalizeFigurines,
-    appendText,
-    makeCastlingUnbreakable,
-    createDiagram
-  } = window.PGNCore;
+  const C = PGNCore;
 
-  function ensureDeps() {
-    if (typeof Chess === "undefined") {
-      console.warn("pgn.js: chess.js missing");
-      return false;
-    }
-    return true;
+  let diagramCounter = 0;
+
+  function createDiagram(parent, fen) {
+    const id = "pgn-diagram-" + (diagramCounter++);
+    const d = document.createElement("div");
+    d.className = "pgn-diagram";
+    d.id = id;
+    parent.appendChild(d);
+
+    setTimeout(() => {
+      Chessboard(id, {
+        position: fen,
+        draggable: false,
+        pieceTheme: C.PIECE_THEME_URL
+      });
+    }, 0);
   }
 
   class PGNGameView {
@@ -51,11 +45,11 @@
     }
 
     static isSANCore(t) {
-      return SAN_CORE_REGEX.test(t);
+      return C.SAN_CORE_REGEX.test(t);
     }
 
-    static split(t) {
-      let lines = t.split(/\r?\n/),
+    static split(text) {
+      let lines = text.split(/\r?\n/),
         H = [],
         M = [],
         inH = true;
@@ -69,42 +63,48 @@
           M.push(L);
         }
       }
-      return { headers: H, moveText: M.join(" ").replace(/\s+/g, " ").trim() };
+
+      return {
+        headers: H,
+        moveText: M.join(" ").replace(/\s+/g, " ").trim()
+      };
     }
 
     build() {
       let raw = this.sourceEl.textContent.trim();
-      raw = normalizeFigurines(raw);
+      raw = C.normalizeFigurines(raw);
 
-      let { headers: H, moveText: M } = PGNGameView.split(raw),
-        pgn = (H.length ? H.join("\n") + "\n\n" : "") + M,
-        chess = new Chess();
+      let { headers: H, moveText: M } = PGNGameView.split(raw);
 
+      const pgn = (H.length ? H.join("\n") + "\n\n" : "") + M;
+
+      const chess = new Chess();
       chess.load_pgn(pgn, { sloppy: true });
 
-      let head = chess.header(),
-        res = normalizeResult(head.Result || ""),
-        needs = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M),
-        movetext = needs ? M : M + (res ? " " + res : "");
+      const head = chess.header();
+      const res = C.normalizeResult(head.Result || "");
+      const needsResult = / (1-0|0-1|1\/2-1\/2|½-½|\*)$/.test(M);
+      const movetext = needsResult ? M : M + (res ? " " + res : "");
 
       this.header(head);
       this.parse(movetext);
+
       this.sourceEl.replaceWith(this.wrapper);
     }
 
     header(h) {
-      let W =
-          (h.WhiteTitle ? h.WhiteTitle + " " : "") +
-          flipName(h.White || "") +
-          (h.WhiteElo ? " (" + h.WhiteElo + ")" : ""),
-        B =
-          (h.BlackTitle ? h.BlackTitle + " " : "") +
-          flipName(h.Black || "") +
-          (h.BlackElo ? " (" + h.BlackElo + ")" : ""),
-        Y = extractYear(h.Date),
-        line = (h.Event || "") + (Y ? ", " + Y : "");
+      const H = document.createElement("h4");
+      const W =
+        (h.WhiteTitle ? h.WhiteTitle + " " : "") +
+        C.flipName(h.White || "") +
+        (h.WhiteElo ? " (" + h.WhiteElo + ")" : "");
+      const B =
+        (h.BlackTitle ? h.BlackTitle + " " : "") +
+        C.flipName(h.Black || "") +
+        (h.BlackElo ? " (" + h.BlackElo + ")" : "");
+      const Y = C.extractYear(h.Date);
+      const line = (h.Event || "") + (Y ? ", " + Y : "");
 
-      let H = document.createElement("h4");
       H.appendChild(document.createTextNode(W + " – " + B));
       H.appendChild(document.createElement("br"));
       H.appendChild(document.createTextNode(line));
@@ -113,7 +113,7 @@
 
     ensure(ctx, cls) {
       if (!ctx.container) {
-        let p = document.createElement("p");
+        const p = document.createElement("p");
         p.className = cls;
         this.wrapper.appendChild(p);
         ctx.container = p;
@@ -129,42 +129,23 @@
       raw = raw.replace(/\[%.*?]/g, "").trim();
       if (!raw.length) return j;
 
-      if (ctx.type === "main") {
-        let k = j;
-        while (k < text.length && /\s/.test(text[k])) k++;
-        let next = "";
-        while (
-          k < text.length &&
-          !/\s/.test(text[k]) &&
-          !"(){}".includes(text[k])
-        ) {
-          next += text[k++];
-        }
-        if (RESULT_REGEX.test(next)) {
-          raw = raw.replace(/(1-0|0-1|1\/2-1\/2|½-½|\*)$/, "").trim();
-        }
-      }
-
-      let parts = raw.split("[D]");
+      const parts = raw.split("[D]");
       for (let idx = 0; idx < parts.length; idx++) {
-        let c = parts[idx].trim();
+        const c = parts[idx].trim();
         if (ctx.type === "variation") {
           this.ensure(ctx, "pgn-variation");
-          if (c) appendText(ctx.container, " " + c);
+          if (c) C.appendText(ctx.container, " " + c);
         } else {
           if (c) {
-            let p = document.createElement("p");
+            const p = document.createElement("p");
             p.className = "pgn-comment";
-            appendText(p, c);
+            C.appendText(p, c);
             this.wrapper.appendChild(p);
           }
           ctx.container = null;
         }
 
-        // For <pgn> we DO create static diagrams on [D]
-        if (idx < parts.length - 1) {
-          createDiagram(this.wrapper, ctx.chess.fen());
-        }
+        if (idx < parts.length - 1) createDiagram(this.wrapper, ctx.chess.fen());
       }
 
       ctx.lastWasInterrupt = true;
@@ -174,7 +155,7 @@
     handleSAN(tok, ctx) {
       let core = tok.replace(/[^a-hKQRBN0-9=O0-]+$/g, "").replace(/0/g, "O");
       if (!PGNGameView.isSANCore(core)) {
-        appendText(ctx.container, tok + " ");
+        C.appendText(ctx.container, tok + " ");
         return null;
       }
 
@@ -185,13 +166,13 @@
         num = Math.floor(ply / 2) + 1;
 
       if (ctx.type === "main") {
-        if (white) appendText(ctx.container, num + "." + NBSP);
+        if (white) C.appendText(ctx.container, num + "." + C.NBSP);
         else if (ctx.lastWasInterrupt)
-          appendText(ctx.container, num + "..." + NBSP);
+          C.appendText(ctx.container, num + "..." + C.NBSP);
       } else {
-        if (white) appendText(ctx.container, num + "." + NBSP);
+        if (white) C.appendText(ctx.container, num + "." + C.NBSP);
         else if (ctx.lastWasInterrupt)
-          appendText(ctx.container, num + "..." + NBSP);
+          C.appendText(ctx.container, num + "..." + C.NBSP);
       }
 
       ctx.prevFen = ctx.chess.fen();
@@ -199,52 +180,53 @@
 
       let mv = ctx.chess.move(core, { sloppy: true });
       if (!mv) {
-        appendText(ctx.container, tok + " ");
+        C.appendText(ctx.container, tok + " ");
         return null;
       }
 
       ctx.lastWasInterrupt = false;
 
-      let span = document.createElement("span");
+      const span = document.createElement("span");
       span.className = "pgn-move";
-      span.dataset.fen = ctx.chess.fen(); // not used now, but harmless
-      span.textContent = makeCastlingUnbreakable(tok) + " ";
+      span.textContent = C.makeCastlingUnbreakable(tok) + " ";
       ctx.container.appendChild(span);
 
       return span;
     }
 
     parse(t) {
-      let chess = new Chess(),
-        ctx = {
-          type: "main",
-          chess: chess,
-          container: null,
-          parent: null,
-          lastWasInterrupt: false,
-          prevFen: chess.fen(),
-          prevHistoryLen: 0,
-          baseHistoryLen: null
-        },
-        i = 0;
+      const chess = new Chess();
 
-      for (; i < t.length; ) {
+      let ctx = {
+        type: "main",
+        chess,
+        container: null,
+        parent: null,
+        lastWasInterrupt: false,
+        prevFen: chess.fen(),
+        prevHistoryLen: 0,
+        baseHistoryLen: null
+      };
+
+      let i = 0;
+
+      while (i < t.length) {
         let ch = t[i];
 
         if (/\s/.test(ch)) {
           while (i < t.length && /\s/.test(t[i])) i++;
           this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
-          appendText(ctx.container, " ");
+          C.appendText(ctx.container, " ");
           continue;
         }
 
         if (ch === "(") {
           i++;
-          let fen = ctx.prevFen || ctx.chess.fen(),
-            len =
-              typeof ctx.prevHistoryLen === "number"
-                ? ctx.prevHistoryLen
-                : ctx.chess.history().length;
+          const fen = ctx.prevFen || ctx.chess.fen();
+          const len = typeof ctx.prevHistoryLen === "number"
+            ? ctx.prevHistoryLen
+            : ctx.chess.history().length;
+
           ctx = {
             type: "variation",
             chess: new Chess(fen),
@@ -275,13 +257,7 @@
         }
 
         let s = i;
-        while (
-          i < t.length &&
-          !/\s/.test(t[i]) &&
-          !"(){}".includes(t[i])
-        )
-          i++;
-
+        while (i < t.length && !/\s/.test(t[i]) && !"(){}".includes(t[i])) i++;
         let tok = t.substring(s, i);
         if (!tok) continue;
 
@@ -294,39 +270,41 @@
           continue;
         }
 
-        if (RESULT_REGEX.test(tok)) {
-          if (this.finalResultPrinted) continue;
-          this.finalResultPrinted = true;
-          this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
-          appendText(ctx.container, tok + " ");
+        if (C.RESULT_REGEX.test(tok)) {
+          if (!this.finalResultPrinted) {
+            this.finalResultPrinted = true;
+            this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
+            C.appendText(ctx.container, tok + " ");
+          }
           continue;
         }
 
-        if (MOVE_NUMBER_REGEX.test(tok)) continue;
+        if (C.MOVE_NUMBER_REGEX.test(tok)) continue;
 
         let core = tok
-            .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
-            .replace(/0/g, "O"),
-          isSAN = PGNGameView.isSANCore(core);
+          .replace(/[^a-hKQRBN0-9=O0-]+$/g, "")
+          .replace(/0/g, "O");
+
+        const isSAN = PGNGameView.isSANCore(core);
 
         if (!isSAN) {
-          if (EVAL_MAP[tok]) {
+          if (C.EVAL_MAP[tok]) {
             this.ensure(
               ctx,
               ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
             );
-            appendText(ctx.container, EVAL_MAP[tok] + " ");
+            C.appendText(ctx.container, C.EVAL_MAP[tok] + " ");
             continue;
           }
 
           if (tok[0] === "$") {
-            let code = +tok.slice(1);
-            if (NAG_MAP[code]) {
+            const code = +tok.slice(1);
+            if (C.NAG_MAP[code]) {
               this.ensure(
                 ctx,
                 ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
               );
-              appendText(ctx.container, NAG_MAP[code] + " ");
+              C.appendText(ctx.container, C.NAG_MAP[code] + " ");
             }
             continue;
           }
@@ -334,11 +312,11 @@
           if (/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(tok)) {
             if (ctx.type === "variation") {
               this.ensure(ctx, "pgn-variation");
-              appendText(ctx.container, " " + tok);
+              C.appendText(ctx.container, " " + tok);
             } else {
-              let p = document.createElement("p");
+              const p = document.createElement("p");
               p.className = "pgn-comment";
-              appendText(p, tok);
+              C.appendText(p, tok);
               this.wrapper.appendChild(p);
               ctx.container = null;
               ctx.lastWasInterrupt = false;
@@ -348,14 +326,14 @@
               ctx,
               ctx.type === "main" ? "pgn-mainline" : "pgn-variation"
             );
-            appendText(ctx.container, tok + " ");
+            C.appendText(ctx.container, tok + " ");
           }
           continue;
         }
 
         this.ensure(ctx, ctx.type === "main" ? "pgn-mainline" : "pgn-variation");
         let m = this.handleSAN(tok, ctx);
-        if (!m) appendText(ctx.container, makeCastlingUnbreakable(tok) + " ");
+        if (!m) C.appendText(ctx.container, C.makeCastlingUnbreakable(tok) + " ");
       }
     }
 
@@ -363,34 +341,23 @@
       const map = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘" };
       this.wrapper.querySelectorAll(".pgn-move").forEach(span => {
         let m = span.textContent.match(/^([KQRBN])(.+?)(\s*)$/);
-        if (m) {
-          span.textContent = map[m[1]] + m[2] + (m[3] || "");
-        }
+        if (m) span.textContent = map[m[1]] + m[2] + (m[3] || "");
       });
     }
   }
 
   class PGNRenderer {
     static renderAll(root) {
-      (root || document)
-        .querySelectorAll("pgn")
-        .forEach(el => new PGNGameView(el));
+      (root || document).querySelectorAll("pgn").forEach(el => new PGNGameView(el));
     }
 
     static init() {
-      if (!ensureDeps()) return;
       PGNRenderer.renderAll(document);
-      window.PGNRenderer = {
-        run(r) {
-          PGNRenderer.renderAll(r || document.body);
-        }
-      };
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => PGNRenderer.init());
-  } else {
-    PGNRenderer.init();
-  }
+  document.readyState === "loading"
+    ? document.addEventListener("DOMContentLoaded", () => PGNRenderer.init())
+    : PGNRenderer.init();
+
 })();

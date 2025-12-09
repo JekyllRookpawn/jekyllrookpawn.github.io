@@ -1,13 +1,11 @@
 /* ============================================================================
    pgn.css
-   Shared styling for:
-   - <pgn>       → .pgn-blog-block
-   - <pgn-reader> → .pgn-reader-block (2-column layout + sticky board)
-   ========================================================================== */
+   Shared styling for <pgn> (static) and <pgn-reader> (interactive)
+   ============================================================================ */
 
-/* ----------------------------------------------------
-   Generic typography for both renderers
----------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   SHARED BASE STYLES
+   -------------------------------------------------------------------------- */
 
 .pgn-blog-block,
 .pgn-reader-block {
@@ -15,66 +13,73 @@
   margin-bottom: 2rem;
 }
 
-/* Game header */
+/* Headers */
 .pgn-blog-block h4,
 .pgn-reader-header h4 {
-  margin: 0 0 0.4rem 0;
+  margin: 0 0 0.75rem 0;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-/* Main line: bold (numbers + moves) */
+/* Moves paragraphs */
+.pgn-mainline,
+.pgn-variation {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0 0 0.35rem 0;
+  padding: 0;
+}
+
+/* Bold mainline (numbers + moves) */
 .pgn-mainline {
   font-weight: 600;
-  line-height: 1.7;
-  font-size: 1rem;
-  margin: 0 0 0.35rem 0;
-  padding: 0;
 }
 
-/* Variations: normal weight */
+.pgn-mainline .reader-move,
+.pgn-mainline .pgn-move {
+  font-weight: 600;
+}
+
+/* Variation normal weight */
 .pgn-variation {
   font-weight: 400;
-  line-height: 1.7;
-  font-size: 1rem;
-  margin: 0 0 0.35rem 0;
-  padding: 0;
-  border: none;
 }
 
-/* Comments: light spacing */
+.pgn-variation .reader-move {
+  font-weight: 400;
+}
+
+/* Comments */
 .pgn-comment {
   margin: 0.35rem 0;
   padding: 0;
-  border: none;
 }
 
-/* Static diagrams used by <pgn> */
+/* Moves */
+.pgn-move,
+.reader-move {
+  white-space: nowrap;
+}
+
+/* Diagrams ([D]) */
 .pgn-diagram {
   width: 350px;
   max-width: 100%;
-  margin: 1rem 0;
+  margin: 0.75rem 0;
 }
 
-/* ----------------------------------------------------
-   Highlight for active move (used by <pgn-reader>)
----------------------------------------------------- */
-
+/* Active move highlight */
 .reader-move-active {
   background: #ffe38a;
   border-radius: 4px;
   padding: 2px 4px;
 }
 
-/* ----------------------------------------------------
-   MOBILE-FIRST LAYOUT for <pgn-reader>
----------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   pgn-reader (interactive)
+   -------------------------------------------------------------------------- */
 
-.pgn-reader-header {
-  position: static;
-  background: #fff;
-  padding-bottom: 0.4rem;
-}
-
-/* MOBILE: stacked layout (board above moves) */
+/* MOBILE */
 .pgn-reader-cols {
   display: flex;
   flex-direction: column;
@@ -82,39 +87,30 @@
   margin-top: 1rem;
 }
 
-/* MOBILE: board column - sticky and centered */
 .pgn-reader-left {
   position: sticky;
-  top: 0rem;
+  top: 0;
   background: #fff;
   z-index: 70;
-  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 0;
   padding: 0.3rem 0;
 }
 
-/* Board itself */
 .pgn-reader-board {
   width: 320px;
   max-width: 100%;
-  margin: 0 auto;
   background: #fff;
-  z-index: 72;
 }
 
-/* Buttons under board */
 .pgn-reader-buttons {
   width: 320px;
-  max-width: 100%;
   display: flex;
   justify-content: center;
   gap: 1rem;
-  margin: 0.2rem auto 0 auto;
   background: #fff;
-  z-index: 72;
+  margin-top: 0.2rem;
 }
 
 .pgn-reader-btn {
@@ -126,26 +122,16 @@
   border-radius: 4px;
 }
 
-/* Moves area (mobile): normal page scroll */
 .pgn-reader-right {
   max-height: none;
   overflow-y: visible;
   padding-right: 0.5rem;
 }
 
-/* ----------------------------------------------------
-   DESKTOP LAYOUT (>=768px) for <pgn-reader>
----------------------------------------------------- */
-
+/* --------------------------------------------------------------------------
+   DESKTOP (>=768px)
+   -------------------------------------------------------------------------- */
 @media (min-width: 768px) {
-
-  .pgn-reader-header {
-    position: static;
-    top: auto;
-    z-index: auto;
-  }
-
-  /* 2 columns: left=board, right=moves */
   .pgn-reader-cols {
     display: grid;
     grid-template-columns: 340px 1fr;
@@ -153,7 +139,6 @@
   }
 
   .pgn-reader-left {
-    top: 6rem;          /* sticky offset */
     align-items: flex-start;
     padding: 0;
   }
@@ -161,35 +146,16 @@
   .pgn-reader-board,
   .pgn-reader-buttons {
     margin-left: 0;
-    margin-right: 0;
   }
 
-  /* Right column: scrollable independently */
   .pgn-reader-right {
     height: 350px;
     overflow-y: auto;
   }
 
-  /* Standard spacing in the moves column */
   .pgn-reader-right * {
     line-height: 1.55;
-    margin-top: 0;
-    margin-bottom: 0.35rem;
+    margin: 0 0 0.35rem 0;
     padding: 0;
-  }
-
-  .pgn-reader-right .pgn-comment {
-    margin: 0.35rem 0;
-    line-height: 1.5;
-  }
-
-  /* Explicitly keep mainline bold in reader */
-  .pgn-reader-right .pgn-mainline {
-    font-weight: 600;
-  }
-
-  /* Variations normal */
-  .pgn-reader-right .pgn-variation {
-    font-weight: 400;
   }
 }
