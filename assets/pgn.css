@@ -1,11 +1,11 @@
 /* ============================================================================
    pgn.css
    FINAL unified styling for <pgn> and <pgn-reader>
-   - Mobile sticky board (safe for animations)
-   - Desktop 2-column layout support
-   - Clean buttons
+   - Mobile sticky board
+   - White background block under board (no text bleed)
+   - Desktop 2-column layout
+   - Buttons improved
    - Bold mainline + move numbers
-   - Static diagrams (<pgn>) unaffected
    ============================================================================ */
 
 /* -----------------------------------------------
@@ -18,7 +18,7 @@
   margin-bottom: 2rem;
 }
 
-/* Header text */
+/* Game header */
 .pgn-blog-block h4,
 .pgn-reader-header h4 {
   margin: 0 0 0.75rem 0;
@@ -35,12 +35,11 @@
   padding: 0;
 }
 
-/* Bold mainline (numbers + moves) */
+/* Bold main line */
 .pgn-mainline {
   font-weight: 600;
 }
 
-/* Variation weight normal */
 .pgn-variation {
   font-weight: 400;
 }
@@ -49,22 +48,23 @@
 .pgn-comment {
   margin: 0.35rem 0;
   padding: 0;
+  font-style: italic;
 }
 
-/* Individual moves (prevent wrap) */
+/* Moves */
 .pgn-move,
 .reader-move {
   white-space: nowrap;
 }
 
-/* Static diagrams under <pgn> */
+/* Static diagrams in <pgn> */
 .pgn-diagram {
   width: 350px;
   max-width: 100%;
   margin: 0.75rem 0;
 }
 
-/* Highlight active move */
+/* Active-highlighted move */
 .reader-move-active {
   background: #ffe38a;
   border-radius: 4px;
@@ -72,18 +72,18 @@
 }
 
 /* -----------------------------------------------
-   BUTTONS (clean, minimal, aligned)
+   BUTTONS
 ----------------------------------------------- */
 
 .pgn-reader-buttons {
   display: flex;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 0.5rem;        /* space above buttons */
+  margin-top: 0.5rem;
 }
 
 .pgn-reader-btn {
-  font-size: 1.1rem;         /* slightly smaller arrows */
+  font-size: 1.1rem;
   padding: 0.25rem 0.6rem;
   background: #fafafa;
   border: 1px solid #ccc;
@@ -99,9 +99,8 @@
 
 /* -----------------------------------------------
    MOBILE (≤ 767px)
-   - Board sticky
-   - Centered
-   - Animation safe
+   - Sticky board
+   - FULL white background panel to prevent text showing behind
 ----------------------------------------------- */
 
 @media (max-width: 767px) {
@@ -112,12 +111,23 @@
     gap: 1.5rem;
   }
 
+  /* ★ Critical fix: full white background block */
   .pgn-reader-left {
     position: sticky;
-    top: 0.3rem;
+    top: 0;
     z-index: 70;
     background: #fff;
-    padding: 0.25rem 0;
+
+    /* FULL TOP BACKGROUND BLOCK — prevents text peeking */
+    padding-top: 1rem;
+    margin-top: -1rem;
+
+    /* slight bottom padding to look natural */
+    padding-bottom: 0.25rem;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .pgn-reader-board {
@@ -130,8 +140,6 @@
 
 /* -----------------------------------------------
    DESKTOP (≥ 768px)
-   - 2-column layout
-   - Non-sticky board
 ----------------------------------------------- */
 
 @media (min-width: 768px) {
@@ -146,6 +154,7 @@
     position: static !important;
     top: auto !important;
     padding: 0;
+    margin: 0;
   }
 
   .pgn-reader-board,
@@ -159,7 +168,6 @@
     overflow-y: auto;
   }
 
-  /* Standardize spacing inside move list */
   .pgn-reader-right * {
     line-height: 1.55;
     margin-top: 0;
