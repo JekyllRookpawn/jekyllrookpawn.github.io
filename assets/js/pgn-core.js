@@ -1,6 +1,6 @@
 // ============================================================================
 // pgn-core.js
-// Shared parsing constants + helpers for pgn.js and pgn-reader.js
+// Shared constants, helpers, and diagram creation for pgn.js & pgn-reader.js
 // ============================================================================
 
 (function () {
@@ -14,7 +14,6 @@
 
   const RESULT_REGEX = /^(1-0|0-1|1\/2-1\/2|½-½|\*)$/;
   const MOVE_NUMBER_REGEX = /^(\d+)(\.+)$/;
-
   const NBSP = "\u00A0";
 
   const NAG_MAP = {
@@ -60,6 +59,7 @@
       : n.slice(i + 1).trim() + " " + n.slice(0, i).trim();
   }
 
+  // Normalize figurines (♘ → N etc.) before parsing PGN
   function normalizeFigurines(text) {
     return text
       .replace(/♔/g, "K")
@@ -79,7 +79,34 @@
       .replace(/0-0|O-O/g, m => m[0] + "\u2011" + m[2]);
   }
 
-  // Expose everything
+  // Static diagrams used by <pgn> when encountering [D]
+  let diagramCounter = 0;
+  function createDiagram(container, fen) {
+    if (typeof Chessboard === "undefined") {
+      console.warn("pgn-core.js: chessboard.js missing for [D] diagrams");
+      return;
+    }
+
+    const id = "pgn-diagram-" + (diagramCounter++);
+    const d = document.createElement("div");
+    d.className = "pgn-diagram";
+    d.id = id;
+    container.appendChild(d);
+
+    // Defer so container is attached
+    setTimeout(() => {
+      const target = document.getElementById(id);
+      if (target) {
+        Chessboard(target, {
+          position: fen,
+          draggable: false,
+          pieceTheme: PIECE_THEME_URL
+        });
+      }
+    }, 0);
+  }
+
+  // Expose shared API
   window.PGNCore = {
     PIECE_THEME_URL,
     SAN_CORE_REGEX,
@@ -93,6 +120,7 @@
     flipName,
     normalizeFigurines,
     appendText,
-    makeCastlingUnbreakable
+    makeCastlingUnbreakable,
+    createDiagram
   };
 })();
