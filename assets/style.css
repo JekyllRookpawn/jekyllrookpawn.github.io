@@ -7,6 +7,8 @@ h1.header img{height:1.5em;margin-right:.5rem}
       font-optical-sizing: auto;
       font-weight: 400;
     }
+
+.post-item {margin-bottom: 2rem;}
       
 h1, h2, h3, h4 {font-weight: 900;}
 h3.post-item {font-weight: 900;}
