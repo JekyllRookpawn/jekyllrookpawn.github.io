@@ -1,14 +1,6 @@
 // ======================================================================
-//   JekyllChess Puzzle Engine (FULL FILE, LAZY REMOTE PARSING)
-//   - Multiple <puzzle> blocks → one board each
-//   - ONE remote PGN pack per page → single-board trainer
-//   - Supports:
-//       FEN + Moves
-//       FEN + inline PGN
-//       Remote PGN (multi-game)
-//   - Lazy background parsing (20 puzzles per batch)
-//   - Lichess-style turn indicator ● (NOW BELOW THE BOARD)
-//   - “Your move…” removed completely
+//   JekyllChess Puzzle Engine — CLEAN FEEDBACK + LICHESS INDICATOR
+//   NEW: Turn indicator disappears when puzzle is solved
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -20,7 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let remotePackInitialized = false;
 
   // ============================================================
-  // PRIORITY 1: REMOTE PGN PACK
+  // PRIORITY 1 — REMOTE PGN PACK
   // ============================================================
   for (const node of puzzleNodes) {
     if (remotePackInitialized) break;
@@ -42,33 +34,32 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ============================================================
-  // PRIORITY 2: LOCAL PUZZLES
+  // PRIORITY 2 — LOCAL PUZZLES
   // ============================================================
   for (const node of puzzleNodes) {
     if (!node.isConnected) continue;
 
     const raw = stripFigurines(node.innerHTML || "");
-    const fenMatch = raw.match(/FEN:\s*([^<\n\r]+)/i);
+    const fenMatch = raw.match(/FEN:\s*([^<\n]+)/i);
     if (!fenMatch) continue;
 
     const fen = fenMatch[1].trim();
-    let sanMoves = null;
 
-    const movesMatch = raw.match(/Moves:\s*([^<\n\r]+)/i);
-    const pgnInlineMatch = raw.match(/PGN:\s*([^<\n\r]+)/i);
+    let sanMoves = null;
+    const movesMatch = raw.match(/Moves:\s*([^<\n]+)/i);
+    const pgnInlineMatch = raw.match(/PGN:\s*([^<\n]+)/i);
 
     if (movesMatch) {
       sanMoves = movesMatch[1].trim().split(/\s+/g);
     } else if (pgnInlineMatch) {
       const txt = pgnInlineMatch[1].trim();
-      if (!/^https?:\/\//i.test(txt)) sanMoves = pgnToSanArray(txt);
+      if (!/^https?:\/\//.test(txt)) sanMoves = pgnToSanArray(txt);
     }
 
-    if (!sanMoves || sanMoves.length === 0) {
-      const w = document.createElement("div");
-      w.style.margin = "20px 0";
-      w.innerHTML = "<div style='color:red'>Invalid puzzle block.</div>";
-      node.replaceWith(w);
+    if (!sanMoves || !sanMoves.length) {
+      const err = document.createElement("div");
+      err.innerHTML = "<div style='color:red'>Invalid puzzle block</div>";
+      node.replaceWith(err);
       continue;
     }
 
@@ -81,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ======================================================================
-// Utility helpers
+// Helpers
 // ======================================================================
 
 function stripFigurines(str) {
@@ -100,9 +91,8 @@ function pgnToSanArray(pgn) {
 function buildUCISolution(fen, sanMoves) {
   const game = new Chess(fen);
   const out = [];
-
   for (let san of sanMoves) {
-    const clean = san.replace(/[!?]/g, "").trim();
+    const clean = san.replace(/[!?]/g, "");
     const mv = game.move(clean, { sloppy: true });
     if (!mv) break;
     out.push(mv.from + mv.to + (mv.promotion || ""));
@@ -111,34 +101,41 @@ function buildUCISolution(fen, sanMoves) {
 }
 
 // ======================================================================
-// Lichess-style turn indicator (NOW BELOW BOARD)
+// Lichess-style indicator (ONLY for "side to move")
 // ======================================================================
 function createTurnIndicator() {
-  const wrap = document.createElement("div");
-  wrap.style.display = "flex";
-  wrap.style.alignItems = "center";
-  wrap.style.gap = "6px";
-  wrap.style.marginTop = "8px";
-  wrap.style.fontSize = "15px";
-  wrap.style.fontWeight = "500";
-  wrap.style.fontFamily = "sans-serif";
+  const row = document.createElement("div");
+  row.style.display = "flex";
+  row.style.alignItems = "center";
+  row.style.gap = "6px";
+  row.style.marginTop = "4px";
+  row.style.fontSize = "15px";
+  row.style.fontWeight = "500";
+  row.style.fontFamily = "sans-serif";
 
   const dot = document.createElement("div");
   dot.style.width = "12px";
   dot.style.height = "12px";
   dot.style.borderRadius = "50%";
   dot.style.border = "1px solid #555";
-  dot.style.transition = "all 0.15s ease";
 
   const label = document.createElement("div");
-  label.textContent = "Loading…";
+  label.textContent = "";
 
-  wrap.append(dot, label);
+  row.append(dot, label);
 
-  return { wrap, dot, label };
+  return { row, dot, label };
 }
 
-function updateTurnIndicator(game, dot, label) {
+function showTurnIndicator(row) {
+  row.style.display = "flex";
+}
+
+function hideTurnIndicator(row) {
+  row.style.display = "none";
+}
+
+function updateTurnIndicatorOnly(game, dot, label) {
   if (!game) return;
 
   if (game.turn() === "w") {
@@ -163,9 +160,14 @@ function renderLocalPuzzle(container, fen, sanMoves) {
   const boardDiv = document.createElement("div");
   boardDiv.style.width = "350px";
 
-  const { wrap: turnDiv, dot, label } = createTurnIndicator();
+  const feedbackDiv = document.createElement("div");
+  feedbackDiv.style.marginTop = "8px";
+  feedbackDiv.style.fontSize = "16px";
+  feedbackDiv.style.fontWeight = "600";
 
-  container.append(boardDiv, turnDiv);
+  const { row: turnDiv, dot, label } = createTurnIndicator();
+
+  container.append(boardDiv, feedbackDiv, turnDiv);
 
   const board = Chessboard(boardDiv, {
     draggable: true,
@@ -185,13 +187,15 @@ function renderLocalPuzzle(container, fen, sanMoves) {
       const expected = solutionUCI[step];
 
       if (played !== expected) {
-        // no "Your move" text anymore
         game.undo();
+        feedbackDiv.textContent = "Wrong move";
+        updateTurnIndicatorOnly(game, dot, label);
         return "snapback";
       }
 
       step++;
-      updateTurnIndicator(game, dot, label);
+      feedbackDiv.textContent = "Correct move!";
+      updateTurnIndicatorOnly(game, dot, label);
 
       if (step < solutionUCI.length) {
         const replySAN = sanMoves[step];
@@ -200,9 +204,14 @@ function renderLocalPuzzle(container, fen, sanMoves) {
           step++;
           setTimeout(() => {
             board.position(game.fen());
-            updateTurnIndicator(game, dot, label);
+            updateTurnIndicatorOnly(game, dot, label);
           }, 150);
         }
+      }
+
+      if (step >= solutionUCI.length) {
+        feedbackDiv.textContent = "Puzzle solved!";
+        hideTurnIndicator(turnDiv);   // <— NEW
       }
 
       return true;
@@ -211,16 +220,18 @@ function renderLocalPuzzle(container, fen, sanMoves) {
     onSnapEnd: () => board.position(game.fen())
   });
 
-  updateTurnIndicator(game, dot, label);
+  showTurnIndicator(turnDiv);
+  updateTurnIndicatorOnly(game, dot, label);
 }
 
 // ======================================================================
-// REMOTE PGN PACK — Lazy loading (20 per batch)
+// REMOTE PGN — LAZY LOADING (20 per batch)
 // ======================================================================
 function initRemotePackLazy(container, url) {
-  let puzzles = [];
   let games = [];
+  let puzzles = [];
   let currentIndex = 0;
+
   let game = null;
   let board = null;
   let sanMoves = [];
@@ -230,17 +241,18 @@ function initRemotePackLazy(container, url) {
 
   const BATCH = 20;
 
-  // UI
   const infoDiv = document.createElement("div");
   infoDiv.style.marginBottom = "5px";
 
   const boardDiv = document.createElement("div");
   boardDiv.style.width = "350px";
 
-  const { wrap: turnDiv, dot, label } = createTurnIndicator();
+  const feedbackDiv = document.createElement("div");
+  feedbackDiv.style.marginTop = "8px";
+  feedbackDiv.style.fontSize = "16px";
+  feedbackDiv.style.fontWeight = "600";
 
-  const statusDiv = document.createElement("div");
-  statusDiv.style.marginTop = "8px";
+  const { row: turnDiv, dot, label } = createTurnIndicator();
 
   const controls = document.createElement("div");
   controls.style.display = "flex";
@@ -256,37 +268,28 @@ function initRemotePackLazy(container, url) {
   nextBtn.textContent = "Next";
 
   controls.append(prevBtn, nextBtn);
-  container.append(infoDiv, boardDiv, turnDiv, statusDiv, controls);
+  container.append(infoDiv, boardDiv, feedbackDiv, turnDiv, controls);
 
-  statusDiv.textContent = "[Loading puzzle pack…]";
+  feedbackDiv.textContent = "Loading puzzle pack…";
 
-  // Fetch PGN
   fetch(url)
     .then(r => r.text())
     .then(text => {
-      games = splitPGNGames(text);
+      games = text.replace(/\r/g, "").split(/(?=\[Event\b)/g).filter(Boolean);
       parseBatch(0);
     })
-    .catch(() => (statusDiv.textContent = "Failed to load PGN."));
+    .catch(() => (feedbackDiv.textContent = "Failed to load PGN."));
 
-  function splitPGNGames(text) {
-    return text
-      .replace(/\r/g, "")
-      .split(/(?=\[Event\b)/g)
-      .map(g => g.trim())
-      .filter(Boolean);
-  }
-
-  function parseOne(gameText) {
-    const fenMatch = gameText.match(/\[FEN\s+"([^"]+)"\]/i);
+  function parseOne(txt) {
+    const fenMatch = txt.match(/\[FEN\s+"([^"]+)"\]/i);
     if (!fenMatch) return null;
 
     const fen = fenMatch[1].trim();
     let moves = [];
 
-    const tag = gameText.match(/\[(Moves|Solution)\s+"([^"]+)"\]/i);
+    const tag = txt.match(/\[(Moves|Solution)\s+"([^"]+)"\]/i);
     if (tag) moves = pgnToSanArray(tag[2]);
-    else moves = pgnToSanArray(gameText.replace(/\[[^\]]+\]/g, " "));
+    else moves = pgnToSanArray(txt.replace(/\[[^\]]+\]/g, " "));
 
     if (!moves.length) return null;
     return { fen, moves };
@@ -305,7 +308,6 @@ function initRemotePackLazy(container, url) {
     if (!board && puzzles.length) {
       initBoard();
       loadPuzzle(0);
-      statusDiv.textContent = "";
     }
 
     if (end < games.length) {
@@ -318,7 +320,8 @@ function initRemotePackLazy(container, url) {
   function initBoard() {
     board = Chessboard(boardDiv, {
       draggable: true,
-      pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+      pieceTheme:
+        "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
 
       onDragStart: (_, piece) => {
         if (game.turn() === "w" && piece.startsWith("b")) return false;
@@ -334,20 +337,28 @@ function initRemotePackLazy(container, url) {
 
         if (played !== expected) {
           game.undo();
+          feedbackDiv.textContent = "Wrong move";
+          updateTurnIndicatorOnly(game, dot, label);
           return "snapback";
         }
 
         step++;
-        updateTurnIndicator(game, dot, label);
+        feedbackDiv.textContent = "Correct move!";
+        updateTurnIndicatorOnly(game, dot, label);
 
         if (step < solutionUCI.length) {
           const replySAN = sanMoves[step];
-          const r = game.move(replySAN, { sloppy: true });
-          if (r) step++;
+          const rep = game.move(replySAN, { sloppy: true });
+          if (rep) step++;
           setTimeout(() => {
             board.position(game.fen());
-            updateTurnIndicator(game, dot, label);
+            updateTurnIndicatorOnly(game, dot, label);
           }, 150);
+        }
+
+        if (step >= solutionUCI.length) {
+          feedbackDiv.textContent = "Puzzle solved!";
+          hideTurnIndicator(turnDiv);   // <— NEW
         }
 
         return true;
@@ -375,7 +386,7 @@ function initRemotePackLazy(container, url) {
       if (currentIndex + 1 < puzzles.length) {
         loadPuzzle(++currentIndex);
       } else if (!allParsed) {
-        statusDiv.textContent = "Loading more puzzles…";
+        feedbackDiv.textContent = "Loading more puzzles…";
       } else {
         currentIndex = 0;
         loadPuzzle(0);
@@ -393,7 +404,8 @@ function initRemotePackLazy(container, url) {
     step = 0;
 
     board.position(p.fen);
-    updateTurnIndicator(game, dot, label);
-    statusDiv.textContent = "";
+    feedbackDiv.textContent = "";
+    showTurnIndicator(turnDiv);       // <— indicator returns
+    updateTurnIndicatorOnly(game, dot, label);
   }
 }
