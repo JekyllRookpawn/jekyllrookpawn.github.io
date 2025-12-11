@@ -1,5 +1,10 @@
 // ======================================================================
-//   SIMPLE SINGLE-PUZZLE ENGINE — FIGURINE-SAFE VERSION
+//   SINGLE-PUZZLE ENGINE — FIGURINE-SAFE, JEKYLL-SAFE VERSION
+//   Supports exactly this Markdown format:
+//   <puzzle>
+//   FEN: ...
+//   Moves: move1 move2 move3 ...
+//   </puzzle>
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -11,23 +16,26 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Always get innerHTML because Jekyll injects <p> etc.
+  // ------------------------------------------------------------------
+  // Extract raw HTML content (Jekyll may insert <p>, <br>, whitespace)
+  // ------------------------------------------------------------------
   let html = node.innerHTML;
   console.log("Raw puzzle innerHTML:", html);
 
-  // ------------------------------------------------------------
-  // Strip all unicode figurines (♔♕♖♗♘♙) BEFORE parsing
-  // This protects against figurine.js and theme CSS
-  // ------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // Remove figurine symbols (produced by figurine.js or fonts)
+  // ------------------------------------------------------------------
   html = html.replace(/[♔♕♖♗♘♙]/g, "");
 
-  // Extract FEN:
+  // ------------------------------------------------------------------
+  // Extract FEN and Moves using HTML-safe regex
+  // ------------------------------------------------------------------
   const fenMatch = html.match(/FEN:\s*([^<\n\r]+)/i);
-  // Extract Moves:
   const movesMatch = html.match(/Moves:\s*([^<\n\r]+)/i);
 
   if (!fenMatch || !movesMatch) {
     console.log("Failed to extract FEN or Moves.");
+
     const wrapper = document.createElement("div");
     wrapper.style.margin = "20px 0";
     wrapper.innerHTML = "<div style='color:red'>Puzzle block invalid</div>";
@@ -42,11 +50,14 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("Extracted FEN:", fen);
   console.log("Extracted SAN moves:", sanMoves);
 
-  // Replace with container
+  // ------------------------------------------------------------------
+  // Replace <puzzle> with container
+  // ------------------------------------------------------------------
   const wrapper = document.createElement("div");
   wrapper.style.margin = "20px 0";
   node.replaceWith(wrapper);
 
+  // Render the puzzle
   renderPuzzle(wrapper, fen, sanMoves);
 });
 
@@ -57,35 +68,35 @@ document.addEventListener("DOMContentLoaded", () => {
 function renderPuzzle(container, fen, sanMoves) {
   console.log("Rendering puzzle with FEN:", fen);
 
+  // ==================================================================
+  //   Convert SAN → UCI (CORRECT PROGRESSION — NO UNDO)
+  // ==================================================================
   const gameForConversion = new Chess(fen);
-  const solution = [];
+  const solutionUCI = [];
 
-  // ------------------------------------------------------------
-  // Convert SAN to UCI (true parsing, no figurines)
-  // ------------------------------------------------------------
   for (let san of sanMoves) {
     const cleaned = san.replace(/[!?]/g, "").trim();
-
     console.log("Parsing SAN:", san, "→ cleaned:", cleaned);
 
     const moveObj = gameForConversion.move(cleaned, { sloppy: true });
+
     if (!moveObj) {
       console.error("Cannot parse SAN move:", san);
-      continue;
+      break; // stop conversion if move fails
     }
 
     const uci = moveObj.from + moveObj.to + (moveObj.promotion || "");
-    solution.push(uci);
-    gameForConversion.undo();
+    solutionUCI.push(uci);
   }
 
-  console.log("UCI solution:", solution);
+  console.log("FINAL UCI solution:", solutionUCI);
 
+  // ==================================================================
+  //   Now create the interactive puzzle using a fresh game instance
+  // ==================================================================
   const game = new Chess(fen);
 
-  // ------------------------------------------------------------
-  // Build UI
-  // ------------------------------------------------------------
+  // UI Elements
   const boardDiv = document.createElement("div");
   boardDiv.style.width = "350px";
 
@@ -104,26 +115,25 @@ function renderPuzzle(container, fen, sanMoves) {
       "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
 
     onDragStart: (_, piece) => {
-      console.log("DragStart fired");
       if (game.turn() === "w" && piece.startsWith("b")) return false;
       if (game.turn() === "b" && piece.startsWith("w")) return false;
     },
 
     onDrop: (source, target) => {
-      console.log("onDrop:", source, "→", target);
+      console.log("DROP:", source, "→", target);
 
       const move = game.move({ from: source, to: target, promotion: "q" });
       if (!move) {
-        console.log("Illegal move attempt.");
+        console.log("Illegal move");
         return "snapback";
       }
 
-      const played = move.from + move.to + (move.promotion || "");
-      const expected = solution[step];
+      const playedUCI = move.from + move.to + (move.promotion || "");
+      const expectedUCI = solutionUCI[step];
 
-      console.log("Played UCI:", played, "Expected:", expected);
+      console.log("Played:", playedUCI, "Expected:", expectedUCI);
 
-      if (played !== expected) {
+      if (playedUCI !== expectedUCI) {
         statusDiv.textContent = "❌ Wrong move";
         game.undo();
         return "snapback";
@@ -132,16 +142,18 @@ function renderPuzzle(container, fen, sanMoves) {
       statusDiv.textContent = "✅ Correct";
       step++;
 
-      // Opponent reply
-      if (step < solution.length) {
-        const replySan = sanMoves[step];
-        console.log("Reply SAN:", replySan);
-        game.move(replySan, { sloppy: true });
+      // Black's reply (move 1.5, 2.5, etc.)
+      if (step < solutionUCI.length) {
+        const replySAN = sanMoves[step];
+        console.log("Black reply:", replySAN);
+
+        game.move(replySAN, { sloppy: true });
         step++;
+
         setTimeout(() => board.position(game.fen()), 150);
       }
 
-      if (step >= solution.length) {
+      if (step >= solutionUCI.length) {
         statusDiv.textContent = "🎉 Puzzle solved!";
       }
 
