@@ -1,63 +1,69 @@
 // ======================================================================
-//  PUZZLE ENGINE — SIMPLE VERSION
-//  Supports only <puzzle> FEN + Moves blocks in Markdown
+//   SIMPLE SINGLE-PUZZLE VERSION (DEBUG MODE)
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
-  const puzzleNodes = document.querySelectorAll("puzzle");
+  const node = document.querySelector("puzzle");
+  if (!node) return;
 
-  puzzleNodes.forEach((node) => {
-    const raw = node.textContent.trim();
-    const lines = raw.split("\n").map(l => l.trim());
+  const text = node.textContent.trim();
+  const lines = text.split("\n").map(l => l.trim());
 
-    let fen = null;
-    let moves = null;
+  let fen = null;
+  let moves = null;
 
-    for (let line of lines) {
-      if (line.startsWith("FEN:"))
-        fen = line.replace("FEN:", "").trim();
+  for (let line of lines) {
+    if (line.startsWith("FEN:")) fen = line.replace("FEN:", "").trim();
+    if (line.startsWith("Moves:")) moves = line.replace("Moves:", "").trim().split(/\s+/);
+  }
 
-      if (line.startsWith("Moves:"))
-        moves = line.replace("Moves:", "").trim().split(/\s+/);
-    }
+  // container where board + status go
+  const wrapper = document.createElement("div");
+  wrapper.style.margin = "25px 0";
+  node.replaceWith(wrapper);
 
-    const wrapper = document.createElement("div");
-    wrapper.className = "puzzle";
-    wrapper.style.margin = "25px 0";
+  if (!fen || !moves) {
+    wrapper.innerHTML = "<div style='color:red'>Invalid puzzle block</div>";
+    return;
+  }
 
-    node.replaceWith(wrapper);
-
-    if (!fen || !moves) {
-      wrapper.innerHTML = `<div style="color:red">Invalid puzzle block.</div>`;
-      return;
-    }
-
-    renderPuzzle(wrapper, fen, moves);
-  });
+  renderSinglePuzzle(wrapper, fen, moves);
 });
 
 // ======================================================================
-//  RENDER A SINGLE PUZZLE
+//  RENDER PUZZLE
 // ======================================================================
 
-function renderPuzzle(container, fen, moves) {
+function renderSinglePuzzle(container, fen, sanMoves) {
   const game = new Chess(fen);
+
+  // -----------------------------
+  //  Convert SAN -> UCI CORRECTLY
+  // -----------------------------
+
   const solution = [];
 
-  // -----------------------------
-  // Convert SAN → UCI
-  // -----------------------------
-  for (let san of moves) {
-    const clean = san.replace(/[!?]/g, "");
-    const temp = game.move(clean, { sloppy: true });
-    if (!temp) continue;
-    solution.push(temp.from + temp.to + (temp.promotion || ""));
-    game.undo();
+  // always start from original position
+  for (let san of sanMoves) {
+    const cleaned = san.replace(/[!?]/g, "").trim();
+    const moveObj = game.move(cleaned, { sloppy: true });
+
+    if (!moveObj) {
+      console.error("SAN cannot be parsed:", san, "in FEN:", fen);
+      continue;
+    }
+
+    solution.push(moveObj.from + moveObj.to + (moveObj.promotion || ""));
+    game.undo(); // go back so next SAN parses from fresh position
   }
 
+  console.log("SAN moves:", sanMoves);
+  console.log("UCI solution:", solution);
+
   // -----------------------------
-  //  Build HTML elements
+  //  CREATE DOM
   // -----------------------------
+
   const boardDiv = document.createElement("div");
   boardDiv.style.width = "350px";
 
@@ -70,39 +76,43 @@ function renderPuzzle(container, fen, moves) {
   let step = 0;
 
   // -----------------------------
-  //  Initialize the chessboard
+  //  INIT BOARD
   // -----------------------------
+
   const board = Chessboard(boardDiv, {
     draggable: true,
     position: fen,
     pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
 
     onDragStart: (_, piece) => {
-      if (game.game_over()) return false;
+      // enforce side to move
       if (game.turn() === "w" && piece.startsWith("b")) return false;
       if (game.turn() === "b" && piece.startsWith("w")) return false;
     },
 
     onDrop: (source, target) => {
       const move = game.move({ from: source, to: target, promotion: "q" });
+
       if (!move) return "snapback";
 
       const uci = move.from + move.to + (move.promotion || "");
-      const correct = solution[step];
+      const expected = solution[step];
 
-      if (uci !== correct) {
+      console.log("User played:", uci, "Expected:", expected);
+
+      if (uci !== expected) {
         statusDiv.textContent = "❌ Wrong move";
         game.undo();
         return "snapback";
       }
 
-      statusDiv.textContent = "✅ Correct";
+      statusDiv.textContent = "✅ Correct!";
       step++;
 
-      // Opponent move (solution step 2, 4, 6, ...)
+      // Opponent reply (step 1,3,5...)
       if (step < solution.length) {
-        const replySAN = moves[step];
-        game.move(replySAN, { sloppy: true });
+        const replySan = sanMoves[step];
+        const replyMove = game.move(replySan, { sloppy: true });
         step++;
         setTimeout(() => board.position(game.fen()), 150);
       }
