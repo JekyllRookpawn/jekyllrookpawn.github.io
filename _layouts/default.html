@@ -2,17 +2,10 @@
 <html>
   {% include head.html %}
   <body>
-
-    <div class="container">
-      <div class="row justify-content-center">
-        <div class="col-lg-8">
-        {% include header.html %}
-        {{ content }}
-        {% include footer.html %}
-        </div>
-      </div>
-    </div>
-
+    {% include header.html %}
+    {{ content }}
+    {% include footer.html %}
+        
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
     <script src="{{ "/assets/js/figurine.js" | prepend: full_base_url }}"></script>
