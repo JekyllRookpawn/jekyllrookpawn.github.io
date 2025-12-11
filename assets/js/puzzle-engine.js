@@ -1,31 +1,42 @@
+// ======================================================================
+//   SIMPLE SINGLE-PUZZLE ENGINE FOR JEKYLL
+//   <puzzle>
+//   FEN: ...
+//   Moves: ...
+//   </puzzle>
+// ======================================================================
+
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Puzzle engine loaded.");
 
+  // Only handle the first <puzzle> for now
   const node = document.querySelector("puzzle");
   if (!node) {
-    console.log("No <puzzle> found on page.");
+    console.log("No <puzzle> element found on page.");
     return;
   }
 
-  // Jekyll may insert HTML inside <puzzle>, so extract ONLY text.
-  let raw = node.innerText || node.textContent || "";
-  raw = raw.replace(/\r/g, "").replace(/\u00A0/g, " ").trim();
+  // Jekyll may inject <p>, <br>, etc. inside <puzzle>.
+  // We'll parse from innerHTML using regex.
+  const rawHtml = node.innerHTML;
+  console.log("Raw puzzle innerHTML:", rawHtml);
 
-  console.log("Raw puzzle block:", raw);
+  // Grab the text after 'FEN:' up to the next tag or newline
+  const fenMatch = rawHtml.match(/FEN:\s*([^<\n\r]+)/i);
+  const movesMatch = rawHtml.match(/Moves:\s*([^<\n\r]+)/i);
 
-  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-
-  let fen = null;
-  let sanMoves = null;
-
-  for (let line of lines) {
-    if (line.startsWith("FEN:")) {
-      fen = line.replace("FEN:", "").trim();
-    }
-    if (line.startsWith("Moves:")) {
-      sanMoves = line.replace("Moves:", "").trim().split(/\s+/);
-    }
+  if (!fenMatch || !movesMatch) {
+    console.log("FEN or Moves not found via regex.");
+    const wrapper = document.createElement("div");
+    wrapper.style.margin = "20px 0";
+    wrapper.innerHTML = "<div style='color:red'>Puzzle block invalid</div>";
+    node.replaceWith(wrapper);
+    return;
   }
+
+  const fen = fenMatch[1].trim().replace(/\s+/g, " ");
+  const movesLine = movesMatch[1].trim().replace(/\s+/g, " ");
+  const sanMoves = movesLine.split(" ");
 
   console.log("Extracted FEN:", fen);
   console.log("Extracted SAN moves:", sanMoves);
@@ -35,62 +46,49 @@ document.addEventListener("DOMContentLoaded", () => {
   wrapper.style.margin = "20px 0";
   node.replaceWith(wrapper);
 
-  if (!fen || !sanMoves) {
-    wrapper.innerHTML = "<div style='color:red'>Puzzle block invalid</div>";
-    return;
-  }
-
   renderSinglePuzzle(wrapper, fen, sanMoves);
 });
 
-
 // ======================================================================
-//  RENDER PUZZLE
+//   RENDER ONE PUZZLE
 // ======================================================================
 
 function renderSinglePuzzle(container, fen, sanMoves) {
-  console.log("renderSinglePuzzle() called.");
+  console.log("renderSinglePuzzle called with FEN:", fen);
+  const convertGame = new Chess(fen);
 
-  const game = new Chess(fen);
-
-  console.log("Initial FEN validated, creating board...");
-
-  // Convert SAN → UCI
-  const solution = [];
+  // Convert SAN → UCI using a separate game
+  const solutionUCI = [];
 
   for (let san of sanMoves) {
-    let clean = san.replace(/[!?]/g, "");
+    const cleaned = san.replace(/[!?]/g, "").trim();
+    if (!cleaned) continue;
 
-    console.log("Parsing SAN:", san, "Cleaned:", clean);
-
-    const moveObj = game.move(clean, { sloppy: true });
-
+    const moveObj = convertGame.move(cleaned, { sloppy: true });
     if (!moveObj) {
-      console.error("SAN move could NOT be parsed:", san);
+      console.error("Cannot parse SAN move:", san, "in FEN:", fen);
       continue;
     }
-
     const uci = moveObj.from + moveObj.to + (moveObj.promotion || "");
-    solution.push(uci);
-
-    game.undo();
+    solutionUCI.push(uci);
   }
 
-  console.log("Final UCI solution array:", solution);
+  console.log("Solution UCI sequence:", solutionUCI);
 
-  // Create UI
+  // This game is used for actual play
+  const game = new Chess(fen);
+
+  // UI elements
   const boardDiv = document.createElement("div");
   boardDiv.style.width = "350px";
-  container.appendChild(boardDiv);
-
   const statusDiv = document.createElement("div");
   statusDiv.style.marginTop = "8px";
   statusDiv.style.fontSize = "16px";
-  container.appendChild(statusDiv);
+
+  container.append(boardDiv, statusDiv);
 
   let step = 0;
 
-  // Create board
   const board = Chessboard(boardDiv, {
     draggable: true,
     position: fen,
@@ -98,6 +96,7 @@ function renderSinglePuzzle(container, fen, sanMoves) {
 
     onDragStart: (_, piece) => {
       console.log("onDragStart fired.");
+      if (game.game_over()) return false;
       if (game.turn() === "w" && piece.startsWith("b")) return false;
       if (game.turn() === "b" && piece.startsWith("w")) return false;
     },
@@ -114,7 +113,7 @@ function renderSinglePuzzle(container, fen, sanMoves) {
       const uci = move.from + move.to + (move.promotion || "");
       console.log("User played UCI:", uci);
 
-      const expected = solution[step];
+      const expected = solutionUCI[step];
       console.log("Expected UCI:", expected);
 
       if (uci !== expected) {
@@ -126,18 +125,18 @@ function renderSinglePuzzle(container, fen, sanMoves) {
       statusDiv.textContent = "✅ Correct";
       step++;
 
-      // Opponent reply
-      if (step < solution.length) {
+      // Opponent reply (odd indices: 1,3,5,...)
+      if (step < solutionUCI.length) {
         const replySAN = sanMoves[step];
         console.log("Opponent reply SAN:", replySAN);
-
         const reply = game.move(replySAN, { sloppy: true });
-
-        step++;
-        setTimeout(() => board.position(game.fen()), 150);
+        if (reply) {
+          step++;
+          setTimeout(() => board.position(game.fen()), 150);
+        }
       }
 
-      if (step >= solution.length) {
+      if (step >= solutionUCI.length) {
         statusDiv.textContent = "🎉 Puzzle solved!";
       }
 
