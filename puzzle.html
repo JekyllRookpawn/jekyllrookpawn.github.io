@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Chess Puzzle Loader – PGN + Markdown</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard.min.js"></script>
+
+<style>
+  body { font-family: Arial; padding: 20px; }
+  #status { margin-top: 20px; font-size: 20px; }
+  #puzzleNum { margin-top: 10px; }
+  textarea { width: 400px; height: 150px; }
+</style>
+</head>
+<body>
+
+<h2>Chess Puzzle Loader</h2>
+
+<h3>Load from remote PGN</h3>
+<input type="text" id="pgnUrl" placeholder="https://url.com/puzzles.pgn" style="width: 400px;">
+<button id="loadPgnBtn">Load PGN</button>
+
+<h3>Load from Markdown</h3>
+<textarea id="mdInput" placeholder="<puzzle>FEN: ... Solution: ...</puzzle>"></textarea>
+<br>
+<button id="loadMdBtn">Load Markdown</button>
+
+<hr>
+
+<button id="nextBtn" disabled>Next Puzzle</button>
+<div id="puzzleNum"></div>
+
+<div id="board" style="width: 400px;"></div>
+<div id="status"></div>
+
+<script>
+// ---------------------------------------------------
+// PARSE PGN PUZZLE PACK
+// ---------------------------------------------------
+function parsePGNPuzzles(pgnText) {
+    const puzzleTexts = pgnText.split(/\n\n(?=\[FEN)/g);
+
+    return puzzleTexts.map((p) => {
+        const fenMatch = p.match(/\[FEN\s+"([^"]+)"\]/i);
+        const movesTag = p.match(/\[(Moves|Solution)\s+"([^"]+)"\]/i);
+        let fen = fenMatch ? fenMatch[1] : null;
+
+        let moves = [];
+        if (movesTag) {
+            moves = movesTag[2].trim().split(/\s+/);
+        } else {
+            const body = p.replace(/\[[^\]]+\]/g, "").trim();
+            moves = body
+                .replace(/\d+\./g, "")
+                .replace(/\{[^}]+\}/g, "")
+                .trim()
+                .split(/\s+/);
+        }
+
+        return { fen, moves };
+    });
+}
+
+// ---------------------------------------------------
+// PARSE MARKDOWN PUZZLES
+// ---------------------------------------------------
+function parseMarkdownPuzzles(md) {
+    const regex = /<puzzle>([\s\S]*?)<\/puzzle>/g;
+    let match;
+    let puzzles = [];
+
+    while ((match = regex.exec(md)) !== null) {
+        const block = match[1];
+
+        const fenMatch = block.match(/FEN:\s*(.+)/i);
+        const solMatch = block.match(/Solution:\s*(.+)/i);
+
+        if (!fenMatch || !solMatch) continue;
+
+        puzzles.push({
+            fen: fenMatch[1].trim(),
+            moves: solMatch[1].trim().split(/\s+/)
+        });
+    }
+
+    return puzzles;
+}
+
+// ---------------------------------------------------
+// GLOBALS
+// ---------------------------------------------------
+let puzzles = [];
+let currentPuzzleIndex = 0;
+let game = null;
+let board = null;
+let puzzleUCI = [];
+let step = 0;
+
+// ---------------------------------------------------
+// LOAD PUZZLE
+// ---------------------------------------------------
+function loadPuzzle(index) {
+    const puzzle = puzzles[index];
+    document.getElementById("puzzleNum").innerHTML =
+        "Puzzle " + (index + 1) + " / " + puzzles.length;
+
+    game = new Chess(puzzle.fen);
+
+    puzzleUCI = puzzle.moves.map((san) => {
+        const move = game.move(san, { sloppy: true });
+        const uci = move.from + move.to + (move.promotion ? move.promotion : "");
+        game.undo();
+        return uci;
+    });
+
+    step = 0;
+    board.position(puzzle.fen);
+    document.getElementById("status").innerHTML = "Your move...";
+}
+
+// ---------------------------------------------------
+// BOARD HANDLERS
+// ---------------------------------------------------
+function onDragStart(source, piece) {
+    if (game.game_over()) return false;
+    if (game.turn() === "w" && piece.startsWith("b")) return false;
+    if (game.turn() === "b" && piece.startsWith("w")) return false;
+}
+
+function onDrop(source, target) {
+    const move = game.move({ from: source, to: target, promotion: "q" });
+    if (!move) return "snapback";
+
+    const userUCI = move.from + move.to + (move.promotion || "");
+    const expectedUCI = puzzleUCI[step];
+
+    if (userUCI !== expectedUCI) {
+        document.getElementById("status").innerHTML = "❌ Wrong move";
+        game.undo();
+        return "snapback";
+    }
+
+    document.getElementById("status").innerHTML = "✅ Correct!";
+    step++;
+
+    // Opponent reply
+    if (step < puzzleUCI.length) {
+        const replySAN = puzzles[currentPuzzleIndex].moves[step];
+        game.move(replySAN, { sloppy: true });
+        step++;
+        setTimeout(() => board.position(game.fen()), 250);
+    }
+
+    if (step >= puzzleUCI.length) {
+        document.getElementById("status").innerHTML = "🎉 Puzzle solved!";
+    }
+
+    return true;
+}
+
+function onSnapEnd() {
+    board.position(game.fen());
+}
+
+// ---------------------------------------------------
+// INIT BOARD
+// ---------------------------------------------------
+board = Chessboard("board", {
+    draggable: true,
+    position: "start",
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd
+});
+
+// ---------------------------------------------------
+// LOAD REMOTE PGN
+// ---------------------------------------------------
+document.getElementById("loadPgnBtn").addEventListener("click", async () => {
+    const url = document.getElementById("pgnUrl").value.trim();
+    if (!url) return alert("Enter a URL");
+
+    const text = await fetch(url).then(r => r.text());
+    puzzles = parsePGNPuzzles(text);
+    if (puzzles.length === 0) return alert("No puzzles found!");
+
+    currentPuzzleIndex = 0;
+    loadPuzzle(0);
+    document.getElementById("nextBtn").disabled = false;
+});
+
+// ---------------------------------------------------
+// LOAD FROM MARKDOWN
+// ---------------------------------------------------
+document.getElementById("loadMdBtn").addEventListener("click", () => {
+    const text = document.getElementById("mdInput").value;
+    puzzles = parseMarkdownPuzzles(text);
+    if (puzzles.length === 0) return alert("No <puzzle> blocks found!");
+
+    currentPuzzleIndex = 0;
+    loadPuzzle(0);
+    document.getElementById("nextBtn").disabled = false;
+});
+
+// ---------------------------------------------------
+// NEXT PUZZLE
+// ---------------------------------------------------
+document.getElementById("nextBtn").addEventListener("click", () => {
+    currentPuzzleIndex++;
+    if (currentPuzzleIndex >= puzzles.length) currentPuzzleIndex = 0;
+    loadPuzzle(currentPuzzleIndex);
+});
+</script>
+
+</body>
+</html>
