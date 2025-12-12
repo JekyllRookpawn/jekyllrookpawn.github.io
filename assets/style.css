@@ -1,4 +1,4 @@
-html {font-size:18px;font-weight:500;color:#333;}
+html {font-size:18px;font-weight:500;color:#333;line-height:1.5rem;}
 body {width: 50vw;margin:0 auto;padding-top:3rem;}
 @media (max-width: 768px) {body {width:100vw;margin:1rem;padding-top:0;}}
 a,a:visited,a:hover,a:active {color:#333}

@@ -1,5 +1,5 @@
 /* =========================================================
-   JekyllChess Puzzle Styles
+   JekyllChess Puzzle Styles — INLINE STATUS (NO FLEX)
    ========================================================= */
 
 .jc-puzzle-wrapper {
@@ -10,26 +10,64 @@
   width: 350px;
 }
 
-/* Board wrapper */
+/* Keep board normal (left-aligned) */
 .jc-board-wrap {
   display: block;
 }
 
-/* Unified status row (desktop) */
+/* ---------------------------------------------------------
+   Status row: inline text + right-anchored buttons
+   --------------------------------------------------------- */
+
 .jc-status-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 12px;
+  width: 350px;          /* match board width */
   margin-top: 6px;
 }
 
+/* Turn + feedback are true inline text on same baseline */
 .jc-turn,
 .jc-feedback {
+  display: inline;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+/* Add a little spacing between turn and feedback */
+.jc-feedback {
+  margin-left: 10px;
+}
+
+/* Buttons pinned to the RIGHT EDGE OF THE BOARD (not the page) */
+.jc-controls {
+  float: right;
+  display: inline-block;
   white-space: nowrap;
 }
 
+/* Buttons themselves */
+.jc-controls button {
+  font-size: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.jc-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Clear the float so the wrapper keeps its height */
+.jc-status-row::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+/* Icons pulse */
 .jc-icon {
+  display: inline-block;
+  vertical-align: baseline;
   animation: jc-pulse 1s ease-in-out infinite;
 }
 
@@ -39,39 +77,35 @@
   100% { transform: scale(1); }
 }
 
-/* Navigation buttons */
-.jc-controls {
-  margin-left: auto;
-  display: flex;
-  gap: 6px;
-}
-
-.jc-controls button {
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.jc-controls button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* =========================================================
+/* ---------------------------------------------------------
    Mobile-only stacked status row
-   ========================================================= */
+   --------------------------------------------------------- */
 
 @media (max-width: 768px) {
+  /* Make the row stack */
   .jc-status-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    width: 100%;
   }
 
+  /* Put controls on their own line, right-aligned */
   .jc-controls {
-    align-self: flex-end;
-    margin-left: 0;
+    float: none;
+    display: block;
+    text-align: right;
+    margin-top: 4px;
   }
 
+  .jc-feedback {
+    margin-left: 0;
+    display: block;
+    margin-top: 4px;
+  }
+
+  .jc-turn {
+    display: block;
+  }
+
+  /* prevent scroll-jank while moving pieces */
   .jc-board {
     touch-action: none;
   }
