@@ -1,8 +1,5 @@
 // ======================================================================
-// JekyllChess Puzzle Engine — FULL SUPPORT
-// FEN + Moves
-// FEN + inline PGN
-// Remote PGN puzzle pack (single board)
+// JekyllChess Puzzle Engine — BATCH / LAZY REMOTE PGN LOADING
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -22,40 +19,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const pgnUrlMatch = raw.match(/PGN:\s*(https?:\/\/[^\s<]+)/i);
     const pgnInlineMatch = !pgnUrlMatch && raw.match(/PGN:\s*(1\.[\s\S]+)/i);
 
-    // ------------------------------------------------------------
-    // REMOTE PGN PACK
-    // ------------------------------------------------------------
     if (pgnUrlMatch && !fenMatch) {
       if (remoteUsed) {
         wrap.textContent = "⚠️ Only one remote PGN pack allowed per page.";
         return;
       }
       remoteUsed = true;
-      initRemotePGNPack(wrap, pgnUrlMatch[1].trim());
+      initRemotePGNPackLazy(wrap, pgnUrlMatch[1].trim());
       return;
     }
 
-    // ------------------------------------------------------------
-    // INLINE PGN (single puzzle)
-    // ------------------------------------------------------------
     if (fenMatch && pgnInlineMatch) {
-      renderLocalPuzzle(
-        wrap,
-        fenMatch[1].trim(),
-        parsePGNMoves(pgnInlineMatch[1])
-      );
+      renderLocalPuzzle(wrap, fenMatch[1].trim(), parsePGNMoves(pgnInlineMatch[1]));
       return;
     }
 
-    // ------------------------------------------------------------
-    // FEN + Moves
-    // ------------------------------------------------------------
     if (fenMatch && movesMatch) {
-      renderLocalPuzzle(
-        wrap,
-        fenMatch[1].trim(),
-        movesMatch[1].trim().split(/\s+/)
-      );
+      renderLocalPuzzle(wrap, fenMatch[1].trim(), movesMatch[1].trim().split(/\s+/));
       return;
     }
 
@@ -88,8 +68,9 @@ function injectPuzzleStyles() {
 
     .jc-controls { margin-top:10px; display:flex; gap:8px; }
 
-    .jc-turn { margin-top:4px; font-size:15px; }
-    @media (max-width:768px) { .jc-board { touch-action:none; } }
+    @media (max-width:768px) {
+      .jc-board { touch-action:none; }
+    }
   `;
   document.head.appendChild(s);
 }
@@ -139,7 +120,7 @@ function showSolved(el) {
 }
 
 // ======================================================================
-// LOCAL PUZZLE
+// LOCAL PUZZLES (unchanged)
 // ======================================================================
 
 function renderLocalPuzzle(container, fen, sanMoves) {
@@ -158,10 +139,10 @@ function renderLocalPuzzle(container, fen, sanMoves) {
     draggable:true,
     position:fen,
     pieceTheme:"https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
-    onDrop:(s,t)=> playMove(s,t) ? true : "snapback"
+    onDrop:(s,t)=> play(s,t) ? true : "snapback"
   });
 
-  function playMove(src, dst) {
+  function play(src,dst) {
     if (solved) return false;
     const mv = game.move({ from:src, to:dst, promotion:"q" });
     if (!mv) return false;
@@ -190,10 +171,12 @@ function renderLocalPuzzle(container, fen, sanMoves) {
 }
 
 // ======================================================================
-// REMOTE PGN PUZZLE PACK (WORKING)
+// REMOTE PGN — BATCH / LAZY LOADER (REAL IMPLEMENTATION)
 // ======================================================================
 
-function initRemotePGNPack(container, url) {
+function initRemotePGNPackLazy(container, url) {
+  const BATCH_SIZE = 20;
+
   const boardDiv = document.createElement("div");
   boardDiv.className = "jc-board";
   const feedback = document.createElement("div");
@@ -209,15 +192,14 @@ function initRemotePGNPack(container, url) {
   controls.append(prev, next);
   container.append(boardDiv, feedback, controls);
 
+  feedback.textContent = "Loading puzzle pack…";
+
   fetch(url)
     .then(r => r.text())
     .then(txt => {
       const games = txt.split(/\[Event\b/).slice(1).map(g => "[Event" + g);
-      const puzzles = games.map(g => {
-        const fen = g.match(/\[FEN\s+"([^"]+)"/)?.[1];
-        const moves = parsePGNMoves(g);
-        return fen && moves.length ? { fen, moves } : null;
-      }).filter(Boolean);
+      const puzzles = [];
+      let parsedUntil = 0;
 
       let index = 0;
       let game, solution, step = 0, solved = false;
@@ -228,11 +210,32 @@ function initRemotePGNPack(container, url) {
         onDrop:(s,t)=> play(s,t) ? true : "snapback"
       });
 
+      function parseNextBatch() {
+        const end = Math.min(parsedUntil + BATCH_SIZE, games.length);
+
+        for (let i = parsedUntil; i < end; i++) {
+          const g = games[i];
+          const fen = g.match(/\[FEN\s+"([^"]+)"/)?.[1];
+          if (!fen) continue;
+          const moves = parsePGNMoves(g);
+          if (moves.length) puzzles.push({ fen, moves });
+        }
+
+        parsedUntil = end;
+      }
+
       function load(i) {
+        if (i >= puzzles.length && parsedUntil < games.length) {
+          parseNextBatch();
+        }
+
+        if (!puzzles[i]) return;
+
         index = i;
         game = new Chess(puzzles[i].fen);
         solution = buildUCISolution(puzzles[i].fen, puzzles[i].moves);
-        step = 0; solved = false;
+        step = 0;
+        solved = false;
         board.position(game.fen());
         feedback.textContent = "";
       }
@@ -243,24 +246,31 @@ function initRemotePGNPack(container, url) {
         if (!mv) return false;
 
         if (mv.from + mv.to !== solution[step]) {
-          game.undo(); showWrong(feedback); return false;
+          game.undo();
+          showWrong(feedback);
+          return false;
         }
 
-        step++; showCorrect(feedback);
+        step++;
+        showCorrect(feedback);
+
         if (step < solution.length) {
           game.move(puzzles[index].moves[step], { sloppy:true });
           step++;
           setTimeout(()=> board.position(game.fen(), true), 200);
         }
+
         if (step >= solution.length) {
-          solved = true; showSolved(feedback);
+          solved = true;
+          showSolved(feedback);
         }
         return true;
       }
 
-      prev.onclick = () => load((index - 1 + puzzles.length) % puzzles.length);
-      next.onclick = () => load((index + 1) % puzzles.length);
+      prev.onclick = () => load(Math.max(index - 1, 0));
+      next.onclick = () => load(index + 1);
 
+      parseNextBatch();
       load(0);
     })
     .catch(() => {
