@@ -20,9 +20,6 @@
 .jc-feedback,
 .jc-turn {
   margin-top: 6px;
-  font-size: 15px;
-  line-height: 1.4;
-  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -35,7 +32,7 @@
 
 /* Turn indicator text (White/Black to move) */
 .jc-turn {
-  color: #555;
+  color: #333;
 }
 
 /* --- Icons & animation (checkmark, cross, trophy) --- */
@@ -81,7 +78,6 @@
 }
 
 .jc-controls button {
-  font-size: 16px;
   padding: 4px 8px;
   cursor: pointer;
 }
