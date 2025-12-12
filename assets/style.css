@@ -1,5 +1,6 @@
-body {width: 50vw;margin:0 auto;padding-top:3rem;font-size:18px;font-weight:500;color:#333;}
-@media (max-width: 768px) {body {width:100vw;margin:.5rem;padding-top:0;}}
+html {font-size:18px;font-weight:500;color:#333;}
+body {width: 50vw;margin:0 auto;padding-top:3rem;}
+@media (max-width: 768px) {body {width:100vw;margin:1rem;padding-top:0;}}
 a,a:visited,a:hover,a:active {color:#333}
 h1.header img {height:3rem;}
 h1.header {margin-top:-1rem;}
