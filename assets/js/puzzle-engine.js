@@ -19,6 +19,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const pgnUrlMatch = raw.match(/PGN:\s*(https?:\/\/[^\s<]+)/i);
     const pgnInline   = !pgnUrlMatch && raw.match(/PGN:\s*(1\.[\s\S]+)/i);
 
+    // ------------------------------------------------------------
+    // REMOTE PGN PACK
+    // ------------------------------------------------------------
     if (pgnUrlMatch && !fenMatch) {
       if (remoteUsed) {
         wrap.textContent = "⚠️ Only one remote PGN pack allowed per page.";
@@ -29,13 +32,27 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    // ------------------------------------------------------------
+    // INLINE PGN (single puzzle)
+    // ------------------------------------------------------------
     if (fenMatch && pgnInline) {
-      renderLocalPuzzle(wrap, fenMatch[1].trim(), parsePGNMoves(pgnInline[1]));
+      renderLocalPuzzle(
+        wrap,
+        fenMatch[1].trim(),
+        parsePGNMoves(pgnInline[1])
+      );
       return;
     }
 
+    // ------------------------------------------------------------
+    // FEN + Moves
+    // ------------------------------------------------------------
     if (fenMatch && movesMatch) {
-      renderLocalPuzzle(wrap, fenMatch[1].trim(), movesMatch[1].trim().split(/\s+/));
+      renderLocalPuzzle(
+        wrap,
+        fenMatch[1].trim(),
+        movesMatch[1].trim().split(/\s+/)
+      );
       return;
     }
 
@@ -103,19 +120,35 @@ function stripFigurines(s) {
   return s.replace(/[♔♕♖♗♘♙]/g, "");
 }
 
+/**
+ * Robust PGN movetext parser:
+ * - strips headers [Tag "..."]
+ * - strips comments {...} and variations (...)
+ * - handles "1.Rxf4" (no space) and "1...Rd1+"
+ * - removes results (1-0, 0-1, 1/2-1/2, *)
+ */
 function parsePGNMoves(pgn) {
   return pgn
-    .replace(/\{[^}]*\}/g, "")
-    .replace(/\([^)]*\)/g, "")
-    .replace(/\d+\.(\.\.)?/g, "")
-    .replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, "")
+    // remove header tags entirely
+    .replace(/\[[^\]]*\]/g, " ")
+    // remove comments and variations
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    // normalize move numbers like "1." and "1..." (with or without spaces)
+    .replace(/\b\d+\.(?:\.\.)?\.?/g, " ")   // covers 1. and 1... (common messy forms)
+    .replace(/\b\d+\.\.\./g, " ")           // explicit 1... just in case
+    // remove results
+    .replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, " ")
+    // collapse whitespace and split
+    .replace(/\s+/g, " ")
     .trim()
-    .split(/\s+/)
+    .split(" ")
     .filter(Boolean);
 }
 
 function normalizeSAN(san) {
-  return san.replace(/[+#?!]/g, "");
+  // remove check/mate/annotations (keeps the move identity)
+  return (san || "").replace(/[+#?!]/g, "");
 }
 
 function buildUCISolution(fen, san) {
@@ -134,11 +167,11 @@ function buildUCISolution(fen, san) {
 // ======================================================================
 
 function showCorrect(el) {
-  el.innerHTML = `Correct move <span class="jc-icon">✅</span>`;
+  el.innerHTML = `Correct move <span class="jc-icon jc-correct">✅</span>`;
 }
 
 function showWrong(el) {
-  el.innerHTML = `Wrong move <span class="jc-icon">❌</span>`;
+  el.innerHTML = `Wrong move <span class="jc-icon jc-wrong">❌</span>`;
 }
 
 function showSolved(el) {
@@ -154,22 +187,27 @@ function updateTurnIndicator(el, game, solved) {
     el.textContent = "";
     return;
   }
-  el.textContent = game.turn() === "w" ? "White to move" : "Black to move";
+  el.textContent = game.turn() === "w"
+    ? "White to move"
+    : "Black to move";
 }
 
 // ======================================================================
-// LOCAL PUZZLE (UNCHANGED)
+// LOCAL PUZZLE
 // ======================================================================
 
 function renderLocalPuzzle(container, fen, sanMoves) {
   const game = new Chess(fen);
   const solution = buildUCISolution(fen, sanMoves);
-  let step = 0, solved = false;
+  let step = 0;
+  let solved = false;
 
   const boardDiv = document.createElement("div");
   boardDiv.className = "jc-board";
+
   const feedback = document.createElement("div");
   feedback.className = "jc-feedback";
+
   const turnDiv = document.createElement("div");
   turnDiv.className = "jc-turn";
 
@@ -184,6 +222,7 @@ function renderLocalPuzzle(container, fen, sanMoves) {
 
   function playMove(src, dst) {
     if (solved) return false;
+
     const mv = game.move({ from: src, to: dst, promotion: "q" });
     if (!mv) return false;
 
@@ -198,6 +237,7 @@ function renderLocalPuzzle(container, fen, sanMoves) {
     showCorrect(feedback);
     updateTurnIndicator(turnDiv, game, solved);
 
+    // Automatic reply (animated)
     if (step < solution.length) {
       game.move(sanMoves[step], { sloppy: true });
       step++;
@@ -220,7 +260,8 @@ function renderLocalPuzzle(container, fen, sanMoves) {
 }
 
 // ======================================================================
-// REMOTE PGN — SAN NORMALIZED (FIXED)
+// REMOTE PGN — BATCH / LAZY LOADER WITH TURN INDICATOR
+// (SAN-based validation + normalized SAN comparison)
 // ======================================================================
 
 function initRemotePGNPackLazy(container, url) {
@@ -228,10 +269,13 @@ function initRemotePGNPackLazy(container, url) {
 
   const boardDiv = document.createElement("div");
   boardDiv.className = "jc-board";
+
   const feedback = document.createElement("div");
   feedback.className = "jc-feedback";
+
   const turnDiv = document.createElement("div");
   turnDiv.className = "jc-turn";
+
   const controls = document.createElement("div");
   controls.className = "jc-controls";
 
@@ -267,6 +311,7 @@ function initRemotePGNPackLazy(container, url) {
           const g = games[i];
           const fen = g.match(/\[FEN\s+"([^"]+)"/)?.[1];
           if (!fen) continue;
+
           const sanMoves = parsePGNMoves(g);
           if (sanMoves.length) puzzles.push({ fen, sanMoves });
         }
