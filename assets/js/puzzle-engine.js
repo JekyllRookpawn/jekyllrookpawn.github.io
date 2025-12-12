@@ -1,5 +1,5 @@
 // ======================================================================
-// JekyllChess Puzzle Engine — with animated feedback (correct / wrong / solved)
+// JekyllChess Puzzle Engine — ICON-ONLY ANIMATED FEEDBACK
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -9,41 +9,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const puzzleNodes = Array.from(document.querySelectorAll("puzzle"));
   if (!puzzleNodes.length) return;
 
-  let remotePackInitialized = false;
-
-  // ============================================================
-  // REMOTE PGN PACK (first one only)
-  // ============================================================
   for (const node of puzzleNodes) {
-    if (remotePackInitialized) break;
-
-    const raw = stripFigurines(node.innerHTML || "");
-    const pgnUrl = raw.match(/PGN:\s*(https?:\/\/[^\s<]+)/i);
-    const fen = raw.match(/FEN:/i);
-
-    if (pgnUrl && !fen) {
-      const wrap = document.createElement("div");
-      wrap.className = "jc-puzzle-wrapper";
-      node.replaceWith(wrap);
-      initRemotePackLazy(wrap, pgnUrl[1].trim());
-      remotePackInitialized = true;
-    }
-  }
-
-  // ============================================================
-  // LOCAL PUZZLES
-  // ============================================================
-  for (const node of puzzleNodes) {
-    if (!node.isConnected) continue;
-
     const raw = stripFigurines(node.innerHTML || "");
     const fenMatch = raw.match(/FEN:\s*([^<\n]+)/i);
-    if (!fenMatch) continue;
+    const movesMatch = raw.match(/Moves:\s*([^<\n]+)/i);
+    if (!fenMatch || !movesMatch) continue;
 
     const fen = fenMatch[1].trim();
-    const movesMatch = raw.match(/Moves:\s*([^<\n]+)/i);
-    if (!movesMatch) continue;
-
     const sanMoves = movesMatch[1].trim().split(/\s+/);
 
     const wrap = document.createElement("div");
@@ -55,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ======================================================================
-// STYLE INJECTION
+// STYLES
 // ======================================================================
 
 function injectPuzzleStyles() {
@@ -72,6 +44,23 @@ function injectPuzzleStyles() {
       margin-top: 8px;
       font-size: 16px;
       font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .jc-icon {
+      display: inline-block;
+      animation: jc-icon-pulse 1s ease-in-out infinite;
+    }
+
+    .jc-correct-icon { color: #2e8b57; }
+    .jc-wrong-icon   { color: #b22222; }
+
+    @keyframes jc-icon-pulse {
+      0%   { transform: scale(1);   filter: drop-shadow(0 0 0px currentColor); }
+      50%  { transform: scale(1.15); filter: drop-shadow(0 0 4px currentColor); }
+      100% { transform: scale(1);   filter: drop-shadow(0 0 0px currentColor); }
     }
 
     .jc-turn {
@@ -98,42 +87,6 @@ function injectPuzzleStyles() {
     @media (max-width: 768px) {
       .jc-board { touch-action: none; }
     }
-
-    /* ✅ Correct move animation */
-    @keyframes jc-correct {
-      0%   { transform: scale(1); box-shadow: none; }
-      50%  { transform: scale(1.08); box-shadow: 0 0 10px rgba(80,200,120,.6); }
-      100% { transform: scale(1); box-shadow: none; }
-    }
-    .jc-correct {
-      animation: jc-correct .4s ease;
-      color: #2e8b57;
-    }
-
-    /* ❌ Wrong move animation */
-    @keyframes jc-wrong {
-      0%   { transform: translateX(0); }
-      25%  { transform: translateX(-4px); }
-      50%  { transform: translateX(4px); }
-      75%  { transform: translateX(-4px); }
-      100% { transform: translateX(0); }
-    }
-    .jc-wrong {
-      animation: jc-wrong .3s ease;
-      color: #b22222;
-    }
-
-    /* 🏆 Trophy */
-    @keyframes jc-trophy-pulse {
-      0%   { transform: scale(1); filter: drop-shadow(0 0 0 gold); }
-      50%  { transform: scale(1.15); filter: drop-shadow(0 0 4px gold); }
-      100% { transform: scale(1); filter: drop-shadow(0 0 0 gold); }
-    }
-    .jc-trophy {
-      margin-left: 4px;
-      animation: jc-trophy-pulse 1s ease-in-out infinite;
-      display: inline-block;
-    }
   `;
   document.head.appendChild(style);
 }
@@ -154,24 +107,16 @@ function buildUCISolution(fen, san) {
   }).filter(Boolean);
 }
 
-function animateCorrect(el) {
-  el.classList.remove("jc-wrong");
-  el.classList.add("jc-correct");
-  setTimeout(() => el.classList.remove("jc-correct"), 400);
+function setCorrectFeedback(el) {
+  el.innerHTML = `<span class="jc-icon jc-correct-icon">✔️</span> Correct move`;
 }
 
-function animateWrong(el) {
-  el.classList.remove("jc-correct");
-  el.classList.add("jc-wrong");
-  setTimeout(() => el.classList.remove("jc-wrong"), 300);
+function setWrongFeedback(el) {
+  el.innerHTML = `<span class="jc-icon jc-wrong-icon">✖️</span> Wrong move`;
 }
 
 function setSolvedFeedback(el) {
-  el.textContent = "Puzzle solved!";
-  const t = document.createElement("span");
-  t.className = "jc-trophy";
-  t.textContent = "🏆";
-  el.appendChild(t);
+  el.innerHTML = `Puzzle solved <span class="jc-icon">🏆</span>`;
 }
 
 // ======================================================================
@@ -202,7 +147,7 @@ function updateTurn(game, dot, label) {
 }
 
 // ======================================================================
-// TAP-TO-MOVE (MINIMAL)
+// TAP-TO-MOVE
 // ======================================================================
 
 function attachTap(boardEl, game, tryMove, solved) {
@@ -259,20 +204,19 @@ function renderLocalPuzzle(container, fen, sanMoves) {
 
   function tryMove(src, dst) {
     if (solved) return false;
+
     const mv = game.move({ from: src, to: dst, promotion: "q" });
     if (!mv) return false;
 
     if (mv.from + mv.to !== solution[step]) {
       game.undo();
-      feedback.textContent = "Wrong move";
-      animateWrong(feedback);
+      setWrongFeedback(feedback);
       updateTurn(game, dot, label);
       return false;
     }
 
     step++;
-    feedback.textContent = "Correct move!";
-    animateCorrect(feedback);
+    setCorrectFeedback(feedback);
     updateTurn(game, dot, label);
     board.position(game.fen());
 
@@ -288,17 +232,10 @@ function renderLocalPuzzle(container, fen, sanMoves) {
       setSolvedFeedback(feedback);
       turnRow.style.display = "none";
     }
+
     return true;
   }
 
   updateTurn(game, dot, label);
   attachTap(boardDiv, game, tryMove, () => solved);
-}
-
-// ======================================================================
-// REMOTE PGN (placeholder — unchanged)
-// ======================================================================
-
-function initRemotePackLazy(container, url) {
-  container.textContent = "Remote PGN packs already supported as before.";
 }
