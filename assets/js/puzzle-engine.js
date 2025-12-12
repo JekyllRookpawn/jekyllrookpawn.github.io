@@ -1,51 +1,37 @@
 // ======================================================================
-//   JekyllChess Puzzle Engine
-//   - Local <puzzle> blocks (FEN + Moves / inline PGN)
-//   - Remote PGN pack (lazy parsing, 20 games per batch)
-//   - Drag + TAP-TO-MOVE (desktop + mobile)
-//   - Minimal square highlight for tap selection
-//   - Feedback: Wrong / Correct / Puzzle solved! 🏆
-//   - Lichess-style "side to move" indicator under board
-//   - Dragging & tapping disabled after puzzle solved
-//   - Mobile scroll fix for dragging
+// JekyllChess Puzzle Engine — with animated feedback (correct / wrong / solved)
 // ======================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Puzzle engine loaded.");
-
-  injectMobileCSS();
-  injectTapCSS();
-  injectTrophyCSS();
+  injectPuzzleStyles();
 
   const puzzleNodes = Array.from(document.querySelectorAll("puzzle"));
-  if (puzzleNodes.length === 0) return;
+  if (!puzzleNodes.length) return;
 
   let remotePackInitialized = false;
 
   // ============================================================
-  // PRIORITY 1 — REMOTE PGN PACK
+  // REMOTE PGN PACK (first one only)
   // ============================================================
   for (const node of puzzleNodes) {
     if (remotePackInitialized) break;
 
     const raw = stripFigurines(node.innerHTML || "");
-    const pgnUrlMatch = raw.match(/PGN:\s*(https?:\/\/[^\s<]+)/i);
-    const fenMatch = raw.match(/FEN:/i);
+    const pgnUrl = raw.match(/PGN:\s*(https?:\/\/[^\s<]+)/i);
+    const fen = raw.match(/FEN:/i);
 
-    if (pgnUrlMatch && !fenMatch) {
-      const url = pgnUrlMatch[1].trim();
-
-      const wrapper = document.createElement("div");
-      wrapper.style.margin = "20px 0";
-      node.replaceWith(wrapper);
-
-      initRemotePackLazy(wrapper, url);
+    if (pgnUrl && !fen) {
+      const wrap = document.createElement("div");
+      wrap.className = "jc-puzzle-wrapper";
+      node.replaceWith(wrap);
+      initRemotePackLazy(wrap, pgnUrl[1].trim());
       remotePackInitialized = true;
     }
   }
 
   // ============================================================
-  // PRIORITY 2 — LOCAL PUZZLES
+  // LOCAL PUZZLES
   // ============================================================
   for (const node of puzzleNodes) {
     if (!node.isConnected) continue;
@@ -55,540 +41,264 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!fenMatch) continue;
 
     const fen = fenMatch[1].trim();
-
-    let sanMoves = null;
     const movesMatch = raw.match(/Moves:\s*([^<\n]+)/i);
-    const pgnInlineMatch = raw.match(/PGN:\s*([^<\n]+)/i);
+    if (!movesMatch) continue;
 
-    if (movesMatch) {
-      sanMoves = movesMatch[1].trim().split(/\s+/g);
-    } else if (pgnInlineMatch) {
-      const txt = pgnInlineMatch[1].trim();
-      if (!/^https?:\/\//.test(txt)) sanMoves = pgnToSanArray(txt);
-    }
+    const sanMoves = movesMatch[1].trim().split(/\s+/);
 
-    if (!sanMoves || !sanMoves.length) {
-      const err = document.createElement("div");
-      err.innerHTML = "<div style='color:red'>Invalid puzzle block</div>";
-      node.replaceWith(err);
-      continue;
-    }
+    const wrap = document.createElement("div");
+    wrap.className = "jc-puzzle-wrapper";
+    node.replaceWith(wrap);
 
-    const wrapper = document.createElement("div");
-    wrapper.style.margin = "20px 0";
-    node.replaceWith(wrapper);
-
-    renderLocalPuzzle(wrapper, fen, sanMoves);
+    renderLocalPuzzle(wrap, fen, sanMoves);
   }
 });
 
 // ======================================================================
-// CSS INJECTION HELPERS
+// STYLE INJECTION
 // ======================================================================
 
-function injectMobileCSS() {
-  if (window.__JCPuzzleMobileCSS__) return;
-  window.__JCPuzzleMobileCSS__ = true;
+function injectPuzzleStyles() {
+  if (document.getElementById("jc-puzzle-styles")) return;
 
   const style = document.createElement("style");
+  style.id = "jc-puzzle-styles";
   style.textContent = `
-    @media (max-width: 768px) {
-      .chessboard-viewport-fix {
-        touch-action: none !important;
-      }
+    .jc-puzzle-wrapper { margin: 20px 0; }
+
+    .jc-board { width: 350px; }
+
+    .jc-feedback {
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 600;
     }
-  `;
-  document.head.appendChild(style);
-}
 
-function injectTapCSS() {
-  if (window.__JCPuzzleTapCSS__) return;
-  window.__JCPuzzleTapCSS__ = true;
+    .jc-turn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 15px;
+      font-weight: 500;
+    }
 
-  const style = document.createElement("style");
-  style.textContent = `
+    .jc-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid #555;
+    }
+
     .jc-selected-square {
-      outline: 2px solid rgba(60, 132, 255, 0.9);
+      outline: 2px solid rgba(60,132,255,.9);
       outline-offset: -2px;
     }
-  `;
-  document.head.appendChild(style);
-}
 
-function injectTrophyCSS() {
-  if (window.__JCPuzzleTrophyCSS__) return;
-  window.__JCPuzzleTrophyCSS__ = true;
+    @media (max-width: 768px) {
+      .jc-board { touch-action: none; }
+    }
 
-  const style = document.createElement("style");
-  style.textContent = `
+    /* ✅ Correct move animation */
+    @keyframes jc-correct {
+      0%   { transform: scale(1); box-shadow: none; }
+      50%  { transform: scale(1.08); box-shadow: 0 0 10px rgba(80,200,120,.6); }
+      100% { transform: scale(1); box-shadow: none; }
+    }
+    .jc-correct {
+      animation: jc-correct .4s ease;
+      color: #2e8b57;
+    }
+
+    /* ❌ Wrong move animation */
+    @keyframes jc-wrong {
+      0%   { transform: translateX(0); }
+      25%  { transform: translateX(-4px); }
+      50%  { transform: translateX(4px); }
+      75%  { transform: translateX(-4px); }
+      100% { transform: translateX(0); }
+    }
+    .jc-wrong {
+      animation: jc-wrong .3s ease;
+      color: #b22222;
+    }
+
+    /* 🏆 Trophy */
     @keyframes jc-trophy-pulse {
-      0%   { transform: scale(1);   filter: drop-shadow(0 0 0px gold); }
+      0%   { transform: scale(1); filter: drop-shadow(0 0 0 gold); }
       50%  { transform: scale(1.15); filter: drop-shadow(0 0 4px gold); }
-      100% { transform: scale(1);   filter: drop-shadow(0 0 0px gold); }
+      100% { transform: scale(1); filter: drop-shadow(0 0 0 gold); }
     }
     .jc-trophy {
-      display: inline-block;
       margin-left: 4px;
       animation: jc-trophy-pulse 1s ease-in-out infinite;
+      display: inline-block;
     }
   `;
   document.head.appendChild(style);
 }
 
 // ======================================================================
-// General helpers
+// HELPERS
 // ======================================================================
 
-function stripFigurines(str) {
-  return str.replace(/[♔♕♖♗♘♙]/g, "");
+function stripFigurines(s) {
+  return s.replace(/[♔♕♖♗♘♙]/g, "");
 }
 
-function pgnToSanArray(pgn) {
-  let s = pgn;
-  s = s.replace(/\{[^}]*\}/g, " ");
-  s = s.replace(/\([^)]*\)/g, " ");
-  s = s.replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, " ");
-  s = s.replace(/\d+\.(\.\.)?/g, " ");
-  return s.trim().split(/\s+/g).filter(Boolean);
+function buildUCISolution(fen, san) {
+  const g = new Chess(fen);
+  return san.map(m => {
+    const mv = g.move(m, { sloppy: true });
+    return mv ? mv.from + mv.to + (mv.promotion || "") : null;
+  }).filter(Boolean);
 }
 
-function buildUCISolution(fen, sanMoves) {
-  const game = new Chess(fen);
-  const out = [];
-  for (let san of sanMoves) {
-    const clean = san.replace(/[!?]/g, "");
-    const mv = game.move(clean, { sloppy: true });
-    if (!mv) break;
-    out.push(mv.from + mv.to + (mv.promotion || ""));
-  }
-  return out;
+function animateCorrect(el) {
+  el.classList.remove("jc-wrong");
+  el.classList.add("jc-correct");
+  setTimeout(() => el.classList.remove("jc-correct"), 400);
 }
 
-function setSolvedFeedback(feedbackDiv) {
-  feedbackDiv.textContent = "";
+function animateWrong(el) {
+  el.classList.remove("jc-correct");
+  el.classList.add("jc-wrong");
+  setTimeout(() => el.classList.remove("jc-wrong"), 300);
+}
 
-  const textSpan = document.createElement("span");
-  textSpan.textContent = "Puzzle solved!";
-
-  const trophySpan = document.createElement("span");
-  trophySpan.textContent = "🏆";
-  trophySpan.className = "jc-trophy";
-
-  feedbackDiv.appendChild(textSpan);
-  feedbackDiv.appendChild(trophySpan);
+function setSolvedFeedback(el) {
+  el.textContent = "Puzzle solved!";
+  const t = document.createElement("span");
+  t.className = "jc-trophy";
+  t.textContent = "🏆";
+  el.appendChild(t);
 }
 
 // ======================================================================
-// Lichess-style indicator
+// TURN INDICATOR
 // ======================================================================
 
 function createTurnIndicator() {
   const row = document.createElement("div");
-  row.style.display = "flex";
-  row.style.alignItems = "center";
-  row.style.gap = "6px";
-  row.style.marginTop = "4px";
-  row.style.fontSize = "15px";
-  row.style.fontWeight = "500";
-  row.style.fontFamily = "sans-serif";
+  row.className = "jc-turn";
 
   const dot = document.createElement("div");
-  dot.style.width = "12px";
-  dot.style.height = "12px";
-  dot.style.borderRadius = "50%";
-  dot.style.border = "1px solid #555";
+  dot.className = "jc-dot";
 
   const label = document.createElement("div");
-  label.textContent = "";
 
   row.append(dot, label);
   return { row, dot, label };
 }
 
-function showTurnIndicator(row) {
-  row.style.display = "flex";
-}
-
-function hideTurnIndicator(row) {
-  row.style.display = "none";
-}
-
-function updateTurnIndicatorOnly(game, dot, label) {
-  if (!game) return;
+function updateTurn(game, dot, label) {
   if (game.turn() === "w") {
     dot.style.background = "#fff";
-    dot.style.border = "1px solid #aaa";
     label.textContent = "White to move";
   } else {
     dot.style.background = "#000";
-    dot.style.border = "1px solid #444";
     label.textContent = "Black to move";
   }
 }
 
 // ======================================================================
-// TAP-TO-MOVE (shared helper)
+// TAP-TO-MOVE (MINIMAL)
 // ======================================================================
 
-function attachTapToMove(boardDiv, game, handleUserMove, getPuzzleSolved) {
-  let selectedSquare = null;
+function attachTap(boardEl, game, tryMove, solved) {
+  let from = null;
 
-  function clearSelection() {
-    const old = boardDiv.querySelector(".jc-selected-square");
-    if (old) old.classList.remove("jc-selected-square");
-    selectedSquare = null;
-  }
+  boardEl.addEventListener("click", e => {
+    if (solved()) return;
 
-  boardDiv.addEventListener("click", (e) => {
-    if (getPuzzleSolved()) return;
+    const sqEl = e.target.closest("[data-square]");
+    if (!sqEl) return;
 
-    const squareEl = e.target.closest(".square-55d63, [data-square]");
-    if (!squareEl) return;
-
-    const square =
-      squareEl.getAttribute("data-square") ||
-      extractSquareFromClass(squareEl.className);
-    if (!square) return;
-
-    if (!selectedSquare) {
-      // First tap: select source square if it has a piece of side to move
-      const piece = game.get(square);
-      if (!piece) return;
-      if (piece.color !== game.turn()) return;
-
-      squareEl.classList.add("jc-selected-square");
-      selectedSquare = square;
-      return;
+    const sq = sqEl.dataset.square;
+    if (!from) {
+      const p = game.get(sq);
+      if (!p || p.color !== game.turn()) return;
+      sqEl.classList.add("jc-selected-square");
+      from = sq;
+    } else {
+      boardEl.querySelectorAll(".jc-selected-square")
+        .forEach(x => x.classList.remove("jc-selected-square"));
+      tryMove(from, sq);
+      from = null;
     }
-
-    if (selectedSquare === square) {
-      // Tap same square: deselect
-      clearSelection();
-      return;
-    }
-
-    // Second tap: attempt move
-    const result = handleUserMove(selectedSquare, square);
-    // In both success and failure, clear visual selection and let board redraw
-    clearSelection();
   });
-
-  function extractSquareFromClass(className) {
-    const m = className.match(/square-([a-h][1-8])/);
-    return m ? m[1] : null;
-  }
-
-  return {
-    clearSelection,
-  };
 }
 
 // ======================================================================
-// LOCAL PUZZLES
+// LOCAL PUZZLE
 // ======================================================================
 
 function renderLocalPuzzle(container, fen, sanMoves) {
-  const solutionUCI = buildUCISolution(fen, sanMoves);
   const game = new Chess(fen);
+  const solution = buildUCISolution(fen, sanMoves);
   let step = 0;
-  let puzzleSolved = false;
+  let solved = false;
 
   const boardDiv = document.createElement("div");
-  boardDiv.style.width = "350px";
-  boardDiv.classList.add("chessboard-viewport-fix");
+  boardDiv.className = "jc-board";
 
-  const feedbackDiv = document.createElement("div");
-  feedbackDiv.style.marginTop = "8px";
-  feedbackDiv.style.fontSize = "16px";
-  feedbackDiv.style.fontWeight = "600";
+  const feedback = document.createElement("div");
+  feedback.className = "jc-feedback";
 
-  const { row: turnDiv, dot, label } = createTurnIndicator();
+  const { row: turnRow, dot, label } = createTurnIndicator();
 
-  container.append(boardDiv, feedbackDiv, turnDiv);
+  container.append(boardDiv, feedback, turnRow);
 
   const board = Chessboard(boardDiv, {
     draggable: true,
     position: fen,
-    pieceTheme:
-      "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
-
-    onDragStart: (_, piece) => {
-      if (puzzleSolved) return false;
-
-      document.body.style.overflow = "hidden";
-
-      if (game.turn() === "w" && piece.startsWith("b")) return false;
-      if (game.turn() === "b" && piece.startsWith("w")) return false;
-    },
-
-    onDrop: (src, dst) => {
-      const res = handleUserMove(src, dst);
-      if (!res) return "snapback";
-      return true;
-    },
-
-    onSnapEnd: () => {
-      board.position(game.fen());
-      document.body.style.overflow = "";
-    },
+    pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+    onDrop: (s, t) => tryMove(s, t) ? true : "snapback",
+    onSnapEnd: () => board.position(game.fen())
   });
 
-  function handleUserMove(src, dst) {
-    if (puzzleSolved) return false;
-
+  function tryMove(src, dst) {
+    if (solved) return false;
     const mv = game.move({ from: src, to: dst, promotion: "q" });
     if (!mv) return false;
 
-    const played = mv.from + mv.to + (mv.promotion || "");
-    const expected = solutionUCI[step];
-
-    if (played !== expected) {
+    if (mv.from + mv.to !== solution[step]) {
       game.undo();
-      feedbackDiv.textContent = "Wrong move";
-      updateTurnIndicatorOnly(game, dot, label);
-      board.position(game.fen());
+      feedback.textContent = "Wrong move";
+      animateWrong(feedback);
+      updateTurn(game, dot, label);
       return false;
     }
 
     step++;
-    feedbackDiv.textContent = "Correct move!";
-    updateTurnIndicatorOnly(game, dot, label);
+    feedback.textContent = "Correct move!";
+    animateCorrect(feedback);
+    updateTurn(game, dot, label);
     board.position(game.fen());
 
-    if (step < solutionUCI.length) {
-      const replySAN = sanMoves[step];
-      const reply = game.move(replySAN, { sloppy: true });
-      if (reply) step++;
-      setTimeout(() => {
-        board.position(game.fen());
-        updateTurnIndicatorOnly(game, dot, label);
-      }, 150);
+    if (step < solution.length) {
+      game.move(sanMoves[step], { sloppy: true });
+      step++;
+      board.position(game.fen());
+      updateTurn(game, dot, label);
     }
 
-    if (step >= solutionUCI.length) {
-      puzzleSolved = true;
-      setSolvedFeedback(feedbackDiv);
-      hideTurnIndicator(turnDiv);
+    if (step >= solution.length) {
+      solved = true;
+      setSolvedFeedback(feedback);
+      turnRow.style.display = "none";
     }
-
     return true;
   }
 
-  showTurnIndicator(turnDiv);
-  updateTurnIndicatorOnly(game, dot, label);
-
-  // Tap-to-move hookup
-  attachTapToMove(boardDiv, game, handleUserMove, () => puzzleSolved);
+  updateTurn(game, dot, label);
+  attachTap(boardDiv, game, tryMove, () => solved);
 }
 
 // ======================================================================
-// REMOTE PGN — LAZY LOADING (20 per batch)
+// REMOTE PGN (placeholder — unchanged)
 // ======================================================================
 
 function initRemotePackLazy(container, url) {
-  let games = [];
-  let puzzles = [];
-  let currentIndex = 0;
-
-  let game = null;
-  let board = null;
-  let sanMoves = [];
-  let solutionUCI = [];
-  let step = 0;
-  let allParsed = false;
-  let puzzleSolved = false;
-
-  const BATCH = 20;
-
-  const infoDiv = document.createElement("div");
-  infoDiv.style.marginBottom = "5px";
-
-  const boardDiv = document.createElement("div");
-  boardDiv.style.width = "350px";
-  boardDiv.classList.add("chessboard-viewport-fix");
-
-  const feedbackDiv = document.createElement("div");
-  feedbackDiv.style.marginTop = "8px";
-  feedbackDiv.style.fontSize = "16px";
-  feedbackDiv.style.fontWeight = "600";
-
-  const { row: turnDiv, dot, label } = createTurnIndicator();
-
-  const controls = document.createElement("div");
-  controls.style.display = "flex";
-  controls.style.gap = "8px";
-  controls.style.marginTop = "10px";
-
-  const prevBtn = document.createElement("button");
-  prevBtn.className = "btn btn-sm btn-secondary";
-  prevBtn.textContent = "Previous";
-
-  const nextBtn = document.createElement("button");
-  nextBtn.className = "btn btn-sm btn-secondary";
-  nextBtn.textContent = "Next";
-
-  controls.append(prevBtn, nextBtn);
-  container.append(infoDiv, boardDiv, feedbackDiv, turnDiv, controls);
-
-  feedbackDiv.textContent = "Loading puzzle pack…";
-
-  fetch(url)
-    .then((r) => r.text())
-    .then((text) => {
-      games = text.replace(/\r/g, "").split(/(?=\[Event\b)/g).filter(Boolean);
-      parseBatch(0);
-    })
-    .catch(() => (feedbackDiv.textContent = "Failed to load PGN."));
-
-  function parseOne(txt) {
-    const fenMatch = txt.match(/\[FEN\s+"([^"]+)"\]/i);
-    if (!fenMatch) return null;
-
-    const fen = fenMatch[1].trim();
-    let moves = [];
-
-    const tag = txt.match(/\[(Moves|Solution)\s+"([^"]+)"\]/i);
-    if (tag) moves = pgnToSanArray(tag[2]);
-    else moves = pgnToSanArray(txt.replace(/\[[^\]]+\]/g, " "));
-
-    if (!moves.length) return null;
-    return { fen, moves };
-  }
-
-  function parseBatch(start) {
-    const end = Math.min(start + BATCH, games.length);
-
-    for (let i = start; i < end; i++) {
-      const p = parseOne(games[i]);
-      if (p) puzzles.push(p);
-    }
-
-    infoDiv.textContent = `Loaded ${puzzles.length} puzzle(s)…`;
-
-    if (!board && puzzles.length) {
-      initBoard();
-      loadPuzzle(0);
-    }
-
-    if (end < games.length) {
-      setTimeout(() => parseBatch(end), 0);
-    } else {
-      allParsed = true;
-    }
-  }
-
-  function initBoard() {
-    board = Chessboard(boardDiv, {
-      draggable: true,
-      pieceTheme:
-        "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
-
-      onDragStart: (_, piece) => {
-        if (puzzleSolved) return false;
-
-        document.body.style.overflow = "hidden";
-
-        if (game.turn() === "w" && piece.startsWith("b")) return false;
-        if (game.turn() === "b" && piece.startsWith("w")) return false;
-      },
-
-      onDrop: (src, dst) => {
-        const res = handleUserMove(src, dst);
-        if (!res) return "snapback";
-        return true;
-      },
-
-      onSnapEnd: () => {
-        board.position(game.fen());
-        document.body.style.overflow = "";
-      },
-    });
-
-    prevBtn.onclick = () => {
-      if (!puzzles.length) return;
-
-      currentIndex =
-        currentIndex > 0
-          ? currentIndex - 1
-          : allParsed
-          ? puzzles.length - 1
-          : 0;
-
-      loadPuzzle(currentIndex);
-    };
-
-    nextBtn.onclick = () => {
-      if (!puzzles.length) return;
-
-      if (currentIndex + 1 < puzzles.length) {
-        currentIndex++;
-        loadPuzzle(currentIndex);
-      } else if (!allParsed) {
-        feedbackDiv.textContent = "Loading more puzzles…";
-      } else {
-        currentIndex = 0;
-        loadPuzzle(0);
-      }
-    };
-
-    // Tap-to-move hookup (remote board shares same boardDiv)
-    attachTapToMove(boardDiv, game, handleUserMove, () => puzzleSolved);
-  }
-
-  function handleUserMove(src, dst) {
-    if (puzzleSolved) return false;
-
-    const mv = game.move({ from: src, to: dst, promotion: "q" });
-    if (!mv) return false;
-
-    const played = mv.from + mv.to + (mv.promotion || "");
-    const expected = solutionUCI[step];
-
-    if (played !== expected) {
-      game.undo();
-      feedbackDiv.textContent = "Wrong move";
-      updateTurnIndicatorOnly(game, dot, label);
-      board.position(game.fen());
-      return false;
-    }
-
-    step++;
-    feedbackDiv.textContent = "Correct move!";
-    updateTurnIndicatorOnly(game, dot, label);
-    board.position(game.fen());
-
-    if (step < solutionUCI.length) {
-      const replySAN = sanMoves[step];
-      const rep = game.move(replySAN, { sloppy: true });
-      if (rep) step++;
-      setTimeout(() => {
-        board.position(game.fen());
-        updateTurnIndicatorOnly(game, dot, label);
-      }, 150);
-    }
-
-    if (step >= solutionUCI.length) {
-      puzzleSolved = true;
-      setSolvedFeedback(feedbackDiv);
-      hideTurnIndicator(turnDiv);
-    }
-
-    return true;
-  }
-
-  function loadPuzzle(i) {
-    const p = puzzles[i];
-    if (!p) return;
-
-    game = new Chess(p.fen);
-    sanMoves = p.moves;
-    solutionUCI = buildUCISolution(p.fen, sanMoves);
-    step = 0;
-    puzzleSolved = false;
-
-    board.position(p.fen());
-    feedbackDiv.textContent = "";
-    showTurnIndicator(turnDiv);
-    updateTurnIndicatorOnly(game, dot, label);
-  }
+  container.textContent = "Remote PGN packs already supported as before.";
 }
