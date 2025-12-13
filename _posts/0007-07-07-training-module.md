@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Guess the move!
+title:  Training module
 FEN: r2qk2r/pb1p1pp1/2p4p/4p3/3bP3/2N5/PPP2PPP/R1BQR1K1 w kq - 0 14
 ---
 
