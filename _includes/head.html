@@ -10,9 +10,9 @@
   {% assign full_base_url = user_url | default: site.github.url %}
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
-  <link rel="stylesheet" href="{{ "/assets/css/hotfix.css" | prepend: full_base_url }}">
-  <link rel="stylesheet" href="{{ "/assets/css/pgn.css" | prepend: full_base_url }}">
-  <link rel="stylesheet" href="{{ "/assets/css/puzzle.css" | prepend: full_base_url }}">
-  <link rel="stylesheet" href="{{ "/assets/css/style.css" | prepend: full_base_url }}">
+  <link rel="stylesheet" href="{{ "/assets/css/hotfix.css" | prepend: site.url }}">
+  <link rel="stylesheet" href="{{ "/assets/css/pgn.css" | prepend: site.url }}">
+  <link rel="stylesheet" href="{{ "/assets/css/puzzle.css" | prepend: site.url }}">
+  <link rel="stylesheet" href="{{ "/assets/css/style.css" | prepend: site.url }}">
   <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 </head>
