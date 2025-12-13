@@ -1,8 +1,9 @@
 // ============================================================================
 // pgn-guess.js — Interactive PGN viewer (uses PGNCore)
-// Progressive reveal with correctly placed comments (mainline only)
-// FIX: move numbers (e.g. "2.") are revealed ONLY together with their move
-//      (so after 2 clicks you see "1. e4 c5", not "1. e4 c5 2.")
+// Progressive reveal with correct move numbers:
+//   - White:  "N."
+//   - Black at paragraph start: "N..."
+// Comments force paragraph breaks.
 // ============================================================================
 
 (function () {
@@ -14,7 +15,6 @@
 
   const C = window.PGNCore;
 
-  // ---- chessboard init guard ----------------------------------------------
   function safeChessboard(targetEl, options, tries = 30, onReady) {
     const el = targetEl;
     if (!el) return null;
@@ -65,8 +65,8 @@
           '<div class="pgn-guess-left">' +
             '<div class="pgn-guess-board"></div>' +
             '<div class="pgn-guess-buttons">' +
-              '<button class="pgn-guess-btn pgn-guess-prev" type="button">◀</button>' +
-              '<button class="pgn-guess-btn pgn-guess-next" type="button">▶</button>' +
+              '<button class="pgn-guess-btn pgn-guess-prev">◀</button>' +
+              '<button class="pgn-guess-btn pgn-guess-next">▶</button>' +
             '</div>' +
           '</div>' +
           '<div class="pgn-guess-right"></div>' +
@@ -77,20 +77,8 @@
       this.boardDiv = this.wrapper.querySelector(".pgn-guess-board");
       this.movesCol = this.wrapper.querySelector(".pgn-guess-right");
 
-      // enforce vertical wrapping/scroll even if site CSS is aggressive
-      if (this.movesCol) {
-        this.movesCol.style.whiteSpace = "normal";
-        this.movesCol.style.overflowX = "hidden";
-        this.movesCol.style.overflowY = "auto";
-        this.movesCol.style.wordBreak = "break-word";
-        this.movesCol.style.overflowWrap = "anywhere";
-      }
-
       this.stream = document.createElement("div");
       this.stream.className = "pgn-guess-stream";
-      this.stream.style.whiteSpace = "normal";
-      this.stream.style.wordBreak = "break-word";
-      this.stream.style.overflowWrap = "anywhere";
       this.movesCol.appendChild(this.stream);
 
       this.parsePGN(raw);
@@ -99,12 +87,13 @@
     parsePGN(text) {
       const chess = new Chess();
 
-      this.items = [];     // ordered reveal items: move numbers, moves, comments
-      this.moveItems = []; // only move spans (for navigation)
+      this.items = [];
+      this.moveItems = [];
 
       let ply = 0;
       let i = 0;
       let inVariation = 0;
+      let newParagraph = true;
 
       const makeSpan = (cls, txt) => {
         const s = document.createElement("span");
@@ -123,18 +112,17 @@
         p.style.display = "none";
         this.stream.appendChild(p);
         this.items.push(p);
+        newParagraph = true;
         return p;
       };
 
       while (i < text.length) {
         const ch = text[i];
 
-        // ---- skip variations completely ------------------------------------
         if (ch === "(") { inVariation++; i++; continue; }
         if (ch === ")" && inVariation > 0) { inVariation--; i++; continue; }
         if (inVariation > 0) { i++; continue; }
 
-        // ---- comments -------------------------------------------------------
         if (ch === "{") {
           let j = i + 1;
           while (j < text.length && text[j] !== "}") j++;
@@ -144,15 +132,12 @@
           continue;
         }
 
-        // ---- whitespace -----------------------------------------------------
         if (/\s/.test(ch)) { i++; continue; }
 
-        // ---- token ----------------------------------------------------------
         const start = i;
         while (i < text.length && !/\s/.test(text[i]) && !"(){}".includes(text[i])) i++;
         const tok = text.slice(start, i);
 
-        // ignore move numbers / results
         if (/^\d+\.*$/.test(tok)) continue;
         if (/^(1-0|0-1|1\/2-1\/2|\*)$/.test(tok)) continue;
 
@@ -162,7 +147,13 @@
         const isWhite = ply % 2 === 0;
         const moveNum = Math.floor(ply / 2) + 1;
 
-        if (isWhite) {
+        if (newParagraph) {
+          if (isWhite) {
+            makeSpan("pgn-movenum guess-num", moveNum + ". ");
+          } else {
+            makeSpan("pgn-movenum guess-num", moveNum + "... ");
+          }
+        } else if (isWhite) {
           makeSpan("pgn-movenum guess-num", moveNum + ". ");
         }
 
@@ -174,6 +165,7 @@
 
         this.moveItems.push(m);
         ply++;
+        newParagraph = false;
       }
 
       this.mainlineIndex = -1;
@@ -202,30 +194,14 @@
       this.items.forEach((el) => (el.style.display = "none"));
     }
 
-    // Reveal items up to the current move, plus any immediately following comments.
-    // Crucially: do NOT reveal the next move number ("2.") until its move is revealed.
-    revealThroughMoveIndex(moveIdx) {
-      if (moveIdx < 0) {
-        this.hideAll();
-        return;
-      }
-
-      const moveEl = this.moveItems[moveIdx];
-      const movePos = this.items.indexOf(moveEl);
-      if (movePos < 0) return;
-
-      // extend cutoff to include consecutive comment paragraphs right after the move
-      let cutoff = movePos;
-      for (let j = movePos + 1; j < this.items.length; j++) {
-        const el = this.items[j];
-        // stop before the next move number or next move
-        if (el.classList && (el.classList.contains("guess-num") || el.classList.contains("guess-move"))) break;
-        // include comments (or any non-move/non-number items immediately after the move)
-        cutoff = j;
-      }
-
-      for (let k = 0; k < this.items.length; k++) {
-        this.items[k].style.display = k <= cutoff ? "" : "none";
+    revealThroughMoveIndex(idx) {
+      let shownMoves = 0;
+      for (const el of this.items) {
+        if (el.classList.contains("guess-move")) {
+          if (shownMoves > idx) break;
+          shownMoves++;
+        }
+        el.style.display = "";
       }
     }
 
@@ -234,41 +210,20 @@
       this.mainlineIndex++;
 
       this.revealThroughMoveIndex(this.mainlineIndex);
-
       const span = this.moveItems[this.mainlineIndex];
-      if (this.board && typeof this.board.position === "function") {
-        this.board.position(span.dataset.fen, true);
-      } else {
-        const apply = () => {
-          if (!this.board || typeof this.board.position !== "function") {
-            requestAnimationFrame(apply);
-            return;
-          }
-          this.board.position(span.dataset.fen, true);
-        };
-        apply();
-      }
+      this.board.position(span.dataset.fen, true);
     }
 
     prev() {
       if (this.mainlineIndex < 0) return;
-
       this.mainlineIndex--;
+
       this.revealThroughMoveIndex(this.mainlineIndex);
-
-      const apply = () => {
-        if (!this.board || typeof this.board.position !== "function") {
-          requestAnimationFrame(apply);
-          return;
-        }
-
-        if (this.mainlineIndex < 0) {
-          this.board.position("start", true);
-        } else {
-          this.board.position(this.moveItems[this.mainlineIndex].dataset.fen, true);
-        }
-      };
-      apply();
+      if (this.mainlineIndex < 0) {
+        this.board.position("start", true);
+      } else {
+        this.board.position(this.moveItems[this.mainlineIndex].dataset.fen, true);
+      }
     }
   }
 
