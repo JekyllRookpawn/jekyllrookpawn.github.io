@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (FINAL bugfixes)
+// pgn-guess.js — Guess-the-move PGN trainer (FINAL autoplay logic)
 // ============================================================================
 
 (function () {
@@ -105,10 +105,10 @@
 
       this.rawText = (src.textContent || "").trim();
       this.flipBoard = src.tagName.toLowerCase() === "pgn-guess-black";
+      this.userIsWhite = !this.flipBoard;
 
       this.moves = [];
       this.index = -1;
-      this.currentRow = null;
       this.game = new Chess();
       this.currentFen = "start";
       this.resultMessage = "";
@@ -181,6 +181,7 @@
         (b) => {
           this.board = b;
           this.updateStatus();
+
           setTimeout(() => {
             this.autoplayUntilUserTurn();
             this.updateStatus();
@@ -192,19 +193,22 @@
     autoplayUntilUserTurn() {
       while (this.index + 1 < this.moves.length) {
         const next = this.moves[this.index + 1];
-        if (next.isWhite === (this.game.turn() === "w")) break;
+
+        // 🔑 FINAL CORRECT CONDITION
+        if (next.isWhite === this.userIsWhite) break;
 
         this.index++;
         this.game.move(normalizeSAN(next.san), { sloppy: true });
         this.currentFen = next.fen;
         this.board.position(next.fen, true);
       }
+
       this.resultMessage = "";
     }
 
     isGuessTurn() {
       const next = this.moves[this.index + 1];
-      return next && next.isWhite === (this.game.turn() === "w");
+      return next && next.isWhite === this.userIsWhite;
     }
 
     updateStatus() {
