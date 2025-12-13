@@ -1,8 +1,9 @@
 // ============================================================================
 // pgn-guess.js — Interactive PGN viewer (uses PGNCore)
-// Fixes:
-//   - Black move numbers: only show "N..." when interrupted and black to play
-//   - Hard enforce wrapping + vertical scrolling in the right pane (uses !important)
+// FINAL BEHAVIOR FIX:
+//   - Move list wraps and scrolls vertically
+//   - ONLY revealed moves are visible (guess-the-move mode)
+//   - Future moves stay hidden
 // ============================================================================
 
 (function () {
@@ -14,37 +15,40 @@
 
   const C = window.PGNCore;
 
-  // Inject once: force wrapping in right pane even if theme CSS uses !important
+  // ---- Inject hard wrap CSS once -------------------------------------------
   function ensureWrapCSSOnce() {
     if (document.getElementById("pgn-guess-wrap-css")) return;
 
     const style = document.createElement("style");
     style.id = "pgn-guess-wrap-css";
-    style.type = "text/css";
     style.textContent = `
-      /* pgn-guess hard wrap + vertical scroll */
       .pgn-guess-right{
         white-space: normal !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
         word-break: break-word !important;
         overflow-wrap: anywhere !important;
+        min-width: 0 !important;
+      }
+      .pgn-guess-cols{
+        min-width: 0 !important;
       }
       .pgn-guess-right .pgn-guess-stream{
-        display: block !important;       /* defeat flex/nowrap layouts */
+        display: block !important;
         white-space: normal !important;
         word-break: break-word !important;
         overflow-wrap: anywhere !important;
       }
       .pgn-guess-right .guess-move,
       .pgn-guess-right .guess-num{
-        display: inline !important;      /* avoid inline-block causing sideways scroll */
+        display: inline !important;
         white-space: normal !important;
       }
     `;
     document.head.appendChild(style);
   }
 
+  // ---- Chessboard init guard ----------------------------------------------
   function safeChessboard(targetEl, options, tries = 30, onReady) {
     if (!targetEl) return null;
     const r = targetEl.getBoundingClientRect();
@@ -81,7 +85,9 @@
 
       this.build();
       this.initBoardAndControls();
-      this.hideAll();
+
+      this.mainlineIndex = -1;
+      this.updateVisibility();
     }
 
     build() {
@@ -95,10 +101,10 @@
             '<div class="pgn-guess-buttons">' +
               '<button class="pgn-guess-btn pgn-guess-prev" type="button">◀</button>' +
               '<button class="pgn-guess-btn pgn-guess-next" type="button">▶</button>' +
-            "</div>" +
-          "</div>" +
+            '</div>' +
+          '</div>' +
           '<div class="pgn-guess-right"></div>' +
-        "</div>";
+        '</div>';
 
       this.sourceEl.replaceWith(this.wrapper);
 
@@ -115,18 +121,17 @@
     parsePGN(text) {
       const chess = new Chess();
 
-      this.items = [];     // moves + comments in order
-      this.moveItems = []; // only moves
+      this.items = [];
+      this.moveItems = [];
 
       let ply = 0;
       let i = 0;
       let inVariation = 0;
-      let newParagraph = true; // interruption marker
+      let newParagraph = true;
 
       const makeMove = (label, san, fen) => {
         const span = document.createElement("span");
         span.className = "pgn-move guess-move";
-        span.style.display = "none";
         span.dataset.fen = fen;
 
         if (label) {
@@ -136,10 +141,9 @@
           span.appendChild(n);
         }
 
-        // Include a trailing space so inline text wraps naturally
         span.appendChild(document.createTextNode(san + " "));
-
         this.stream.appendChild(span);
+
         this.items.push(span);
         this.moveItems.push(span);
 
@@ -150,23 +154,18 @@
         const p = document.createElement("p");
         p.className = "pgn-comment";
         p.textContent = txt;
-        p.style.display = "none";
         this.stream.appendChild(p);
         this.items.push(p);
-
-        // A comment interrupts the move flow
         newParagraph = true;
       };
 
       while (i < text.length) {
         const ch = text[i];
 
-        // variations interrupt the mainline flow; we skip their contents
         if (ch === "(") { inVariation++; i++; newParagraph = true; continue; }
-        if (ch === ")" && inVariation > 0) { inVariation--; i++; continue; }
-        if (inVariation > 0) { i++; continue; }
+        if (ch === ")" && inVariation) { inVariation--; i++; continue; }
+        if (inVariation) { i++; continue; }
 
-        // comments interrupt flow and must appear as paragraphs
         if (ch === "{") {
           let j = i + 1;
           while (j < text.length && text[j] !== "}") j++;
@@ -182,7 +181,6 @@
         while (i < text.length && !/\s/.test(text[i]) && !"(){}".includes(text[i])) i++;
         const tok = text.slice(start, i);
 
-        // ignore move numbers / results
         if (/^\d+\.{1,3}$/.test(tok)) continue;
         if (/^(1-0|0-1|1\/2-1\/2|\*)$/.test(tok)) continue;
 
@@ -195,8 +193,6 @@
         const mv = chess.move(core, { sloppy: true });
         if (!mv) continue;
 
-        // White always gets "N."
-        // Black gets "N..." ONLY if interrupted and black to play
         let label = null;
         if (isWhite) label = moveNum + ". ";
         else if (newParagraph) label = moveNum + "... ";
@@ -204,8 +200,6 @@
         makeMove(label, tok, chess.fen());
         ply++;
       }
-
-      this.mainlineIndex = -1;
     }
 
     initBoardAndControls() {
@@ -221,63 +215,53 @@
         (b) => (this.board = b)
       );
 
-      const nextBtn = this.wrapper.querySelector(".pgn-guess-next");
-      const prevBtn = this.wrapper.querySelector(".pgn-guess-prev");
-
-      nextBtn && nextBtn.addEventListener("click", () => this.next());
-      prevBtn && prevBtn.addEventListener("click", () => this.prev());
+      this.wrapper.querySelector(".pgn-guess-next")
+        .addEventListener("click", () => this.next());
+      this.wrapper.querySelector(".pgn-guess-prev")
+        .addEventListener("click", () => this.prev());
     }
 
-    hideAll() {
-      this.items.forEach((el) => (el.style.display = "none"));
-    }
+    updateVisibility() {
+      let moveCount = 0;
 
-    revealThroughMoveIndex(idx) {
-      let shownMoves = 0;
       for (const el of this.items) {
-        if (el.classList && el.classList.contains("guess-move")) {
-          if (shownMoves > idx) break;
-          shownMoves++;
+        if (el.classList.contains("guess-move")) {
+          if (moveCount <= this.mainlineIndex) {
+            el.style.display = "";
+          } else {
+            el.style.display = "none";
+          }
+          moveCount++;
+        } else {
+          // comments belong to the last revealed move
+          el.style.display = moveCount - 1 <= this.mainlineIndex ? "" : "none";
         }
-        el.style.display = "";
       }
     }
 
     next() {
       if (this.mainlineIndex + 1 >= this.moveItems.length) return;
       this.mainlineIndex++;
-      this.revealThroughMoveIndex(this.mainlineIndex);
-
-      const span = this.moveItems[this.mainlineIndex];
-      const apply = () => {
-        if (!this.board || typeof this.board.position !== "function") {
-          requestAnimationFrame(apply);
-          return;
-        }
-        this.board.position(span.dataset.fen, true);
-      };
-      apply();
+      this.updateVisibility();
+      this.board.position(this.moveItems[this.mainlineIndex].dataset.fen, true);
     }
 
     prev() {
       if (this.mainlineIndex < 0) return;
       this.mainlineIndex--;
-      this.revealThroughMoveIndex(this.mainlineIndex);
+      this.updateVisibility();
 
-      const apply = () => {
-        if (!this.board || typeof this.board.position !== "function") {
-          requestAnimationFrame(apply);
-          return;
-        }
-        if (this.mainlineIndex < 0) this.board.position("start", true);
-        else this.board.position(this.moveItems[this.mainlineIndex].dataset.fen, true);
-      };
-      apply();
+      if (this.mainlineIndex < 0) {
+        this.board.position("start", true);
+      } else {
+        this.board.position(this.moveItems[this.mainlineIndex].dataset.fen, true);
+      }
     }
   }
 
   function init() {
-    document.querySelectorAll("pgn-guess").forEach((el) => new ReaderPGNView(el));
+    document.querySelectorAll("pgn-guess")
+      .forEach((el) => new ReaderPGNView(el));
   }
 
   if (document.readyState === "loading") {
