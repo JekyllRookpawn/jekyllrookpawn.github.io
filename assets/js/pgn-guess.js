@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (move list restored + all fixes)
+// pgn-guess.js — Guess-the-move PGN trainer (FINAL, COMPLETE, STABLE)
 // ============================================================================
 
 (function () {
@@ -11,8 +11,8 @@
 
   const C = window.PGNCore;
 
-  const AUTOPLAY_DELAY = 700;  // show "⚐/⚑ ... to move" first, then start autoplay
-  const FEEDBACK_DELAY = 600;  // show "Correct! ✅" before autoplay continues
+  const AUTOPLAY_DELAY = 700;   // delay before initial autoplay
+  const FEEDBACK_DELAY = 600;   // delay to show "Correct! ✅" before autoplay
 
   // --------------------------------------------------------------------------
   // Styles
@@ -57,7 +57,10 @@
       .pgn-move-white { margin-right: 0.6em; }
       .pgn-move-black { margin-left: 0.3em; }
 
-      .pgn-comment { font-weight: 400; margin: 0.35em 0 0.35em 0; }
+      .pgn-comment {
+        font-weight: 400;
+        margin: 0.35em 0;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -94,7 +97,6 @@
       .trim();
   }
 
-  // Normalize SAN before feeding to chess.js (fixes exd5 etc.)
   function normalizeSAN(tok) {
     return tok
       .replace(/\[%.*?]/g, "")
@@ -117,18 +119,14 @@
 
       this.rawText = (src.textContent || "").trim();
       this.flipBoard = src.tagName.toLowerCase() === "pgn-guess-black";
-      this.userIsWhite = !this.flipBoard; // puzzles are always "guess this side's move"
+      this.userIsWhite = !this.flipBoard;
 
       this.moves = [];
       this.index = -1;
-
       this.currentRow = null;
+
       this.game = new Chess();
-
-      // authoritative FEN to force-sync after animations (fixes capture ghosts)
       this.currentFen = "start";
-
-      // status suffix (Correct/Wrong/Solved)
       this.resultMessage = "";
 
       this.build(src);
@@ -158,7 +156,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // PGN parsing (restored: comments/variations attach + ply tracking)
+    // PGN parsing (full, robust, comment-safe)
     // ------------------------------------------------------------------------
 
     parsePGN() {
@@ -179,7 +177,6 @@
       while (i < raw.length) {
         const ch = raw[i];
 
-        // Variations: ( ... )
         if (ch === "(") {
           let depth = 1, j = i + 1;
           while (j < raw.length && depth > 0) {
@@ -193,7 +190,6 @@
           continue;
         }
 
-        // Comments: { ... }
         if (ch === "{") {
           let j = i + 1;
           while (j < raw.length && raw[j] !== "}") j++;
@@ -204,28 +200,21 @@
 
         if (/\s/.test(ch)) { i++; continue; }
 
-        // read token
         const s = i;
         while (i < raw.length && !/\s/.test(raw[i]) && !"(){}".includes(raw[i])) i++;
         const tok = raw.slice(s, i);
 
-        // skip move numbers
         if (/^\d+\.{1,3}$/.test(tok)) continue;
 
         const san = normalizeSAN(tok);
         if (!san) continue;
-
-        // Try to play it; if illegal/unparseable, skip token
         if (!chess.move(san, { sloppy: true })) continue;
 
-        const isWhite = ply % 2 === 0;
-        const moveNo = Math.floor(ply / 2) + 1;
-
         this.moves.push({
-          isWhite,
-          moveNo,
-          san: tok,          // keep original display token
-          fen: chess.fen(),  // authoritative resulting fen
+          isWhite: ply % 2 === 0,
+          moveNo: Math.floor(ply / 2) + 1,
+          san: tok,
+          fen: chess.fen(),
           comments: pending.splice(0)
         });
 
@@ -248,9 +237,7 @@
           onDragStart: () => this.isGuessTurn(),
           onDrop: (s, t) => this.onUserDrop(s, t),
 
-          // After any animation (captures especially), force-sync to authoritative fen
           onSnapEnd: () => {
-            if (!this.board) return;
             this.board.position(this.currentFen, false);
           }
         },
@@ -260,7 +247,6 @@
           this.setBoard("start", false);
           this.updateStatus();
 
-          // Delay: show turn indicator first, then autoplay opponent moves
           setTimeout(() => {
             this.autoplayOpponentMoves();
             this.updateStatus();
@@ -270,47 +256,44 @@
     }
 
     // ------------------------------------------------------------------------
-    // Status + autoplay rules
-    // ------------------------------------------------------------------------
-
-    updateStatus() {
-      const turn = this.game.turn() === "w" ? "White" : "Black";
-      const flag = this.game.turn() === "w" ? "⚐" : "⚑";
-      const suffix = this.resultMessage ? ` · ${this.resultMessage}` : "";
-      this.statusEl.textContent = `${flag} ${turn} to move${suffix}`;
-    }
-
-    // Puzzle rule: user guesses a fixed side (white for <pgn-guess>, black for <pgn-guess-black>)
-    isGuessTurn() {
-      const next = this.moves[this.index + 1];
-      return !!next && next.isWhite === this.userIsWhite;
-    }
-
-    // Autoplay while the next move belongs to the opponent (not the user's guessing side)
-    autoplayOpponentMoves() {
-      while (this.index + 1 < this.moves.length) {
-        const next = this.moves[this.index + 1];
-        if (next.isWhite === this.userIsWhite) break; // stop at puzzle move
-
-        this.index++;
-        this.game.move(normalizeSAN(next.san), { sloppy: true });
-
-        // autoplay is animated
-        this.setBoard(next.fen, true);
-        this.appendMove();
-      }
-
-      // reset feedback once we reach a puzzle
-      this.resultMessage = "";
-    }
 
     setBoard(fen, animate) {
       this.currentFen = fen;
       this.board.position(fen, !!animate);
     }
 
+    autoplayOpponentMoves() {
+      while (this.index + 1 < this.moves.length) {
+        const next = this.moves[this.index + 1];
+        if (next.isWhite === this.userIsWhite) break;
+
+        this.index++;
+        this.game.move(normalizeSAN(next.san), { sloppy: true });
+        this.setBoard(next.fen, true);
+        this.appendMove();
+      }
+      this.resultMessage = "";
+    }
+
+    isGuessTurn() {
+      const next = this.moves[this.index + 1];
+      return next && next.isWhite === this.userIsWhite;
+    }
+
+    updateStatus() {
+      if (this.resultMessage === "Training solved! 🏆") {
+        this.statusEl.textContent = "Training solved! 🏆";
+        return;
+      }
+
+      const turn = this.game.turn() === "w" ? "White" : "Black";
+      const flag = this.game.turn() === "w" ? "⚐" : "⚑";
+      const suffix = this.resultMessage ? ` · ${this.resultMessage}` : "";
+      this.statusEl.textContent = `${flag} ${turn} to move${suffix}`;
+    }
+
     // ------------------------------------------------------------------------
-    // Drag input handler
+    // User input
     // ------------------------------------------------------------------------
 
     onUserDrop(source, target) {
@@ -319,7 +302,6 @@
       const expected = this.moves[this.index + 1];
       const legal = this.game.moves({ verbose: true });
 
-      // Validate by resulting FEN (supports alternative SANs and multiple correct moves that reach same fen)
       const ok = legal.some(m => {
         if (m.from !== source || m.to !== target) return false;
         const t = new Chess(this.game.fen());
@@ -333,20 +315,17 @@
         return "snapback";
       }
 
-      // Correct move: advance to expected position (NO animation for user moves)
       this.index++;
       this.game.load(expected.fen);
       this.setBoard(expected.fen, false);
       this.appendMove();
 
-      // If that was the final move in the line, end training
       if (this.index === this.moves.length - 1) {
         this.resultMessage = "Training solved! 🏆";
         this.updateStatus();
         return;
       }
 
-      // Show Correct! briefly, then autoplay opponent replies
       this.resultMessage = "Correct! ✅";
       this.updateStatus();
 
@@ -354,12 +333,10 @@
         this.autoplayOpponentMoves();
         this.updateStatus();
       }, FEEDBACK_DELAY);
-
-      return;
     }
 
     // ------------------------------------------------------------------------
-    // Move list rendering (restored)
+    // Move list rendering
     // ------------------------------------------------------------------------
 
     appendMove() {
@@ -380,7 +357,6 @@
 
         row.appendChild(no);
         row.appendChild(w);
-
         this.rightPane.appendChild(row);
         this.currentRow = row;
       } else if (this.currentRow) {
@@ -390,7 +366,6 @@
         this.currentRow.appendChild(b);
       }
 
-      // comments / attached variations show as moves are revealed
       m.comments.forEach((c) => {
         const p = document.createElement("p");
         p.className = "pgn-comment";
@@ -406,7 +381,7 @@
 
   function init() {
     document.querySelectorAll("pgn-guess, pgn-guess-black")
-      .forEach((el) => new ReaderPGNView(el));
+      .forEach(el => new ReaderPGNView(el));
   }
 
   document.readyState === "loading"
