@@ -38,7 +38,6 @@
 
   function tokenizeMoves(text) {
     let s = String(text || "");
-
     s = s.replace(/\{[\s\S]*?\}/g, " ");
     s = s.replace(/;[^\n]*/g, " ");
     while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, " ");
@@ -61,36 +60,26 @@
   }
 
   /* -------------------------------------------------- */
-  /* Safe chessboard init                               */
-  /* -------------------------------------------------- */
-
-  function safeChessboard(el, opts, cb, tries = 60) {
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    if ((r.width === 0 || r.height === 0) && tries) {
-      requestAnimationFrame(() =>
-        safeChessboard(el, opts, cb, tries - 1)
-      );
-      return;
-    }
-    const board = Chessboard(el, opts);
-    cb && cb(board);
-  }
-
-  /* -------------------------------------------------- */
   /* Local puzzle renderer                              */
   /* -------------------------------------------------- */
 
   function renderLocalPuzzle(container, fen, moves, counterText, afterReady) {
+    container.innerHTML = "";
+
+    const loading = document.createElement("div");
+    loading.textContent = "Loading...";
+    container.append(loading);
+
+    const boardDiv = document.createElement("div");
+    boardDiv.className = "jc-board";
+    container.insertBefore(boardDiv, loading);
+
     const game = new Chess(fen);
     const solverSide = game.turn();
     let index = 0;
     let locked = false;
     let solved = false;
     let board;
-
-    const boardDiv = document.createElement("div");
-    boardDiv.className = "jc-board";
 
     const status = document.createElement("div");
     status.style.display = "flex";
@@ -171,26 +160,20 @@
       return true;
     }
 
-    safeChessboard(
-      boardDiv,
-      {
-        draggable: true,
-        position: fen,
-        pieceTheme: PIECE_THEME,
-        onDrop,
-        onSnapEnd: () => hardSync(board, game),
-      },
-      (b) => {
-        board = b;
+    Chessboard(boardDiv, {
+      draggable: true,
+      position: fen,
+      pieceTheme: PIECE_THEME,
+      onDrop,
+      onSnapEnd: () => hardSync(board, game),
+    });
 
-        // 🔑 ONLY NOW render everything
-        container.innerHTML = "";
-        container.append(boardDiv, status);
+    board = Chessboard(boardDiv);
+    updateTurn();
 
-        updateTurn();
-        afterReady && afterReady(status);
-      }
-    );
+    loading.remove();
+    container.append(status);
+    afterReady && afterReady(status);
   }
 
   /* -------------------------------------------------- */
@@ -214,32 +197,19 @@
 
   function parseGame(pgn) {
     const fenMatch = pgn.match(/\[FEN\s+"([^"]+)"\]/);
-    const fen = fenMatch ? fenMatch[1] : "start";
-    const moves = tokenizeMoves(extractMovetext(pgn));
-    return { fen, moves };
+    return {
+      fen: fenMatch ? fenMatch[1] : "start",
+      moves: tokenizeMoves(extractMovetext(pgn)),
+    };
   }
 
   async function renderRemotePGN(container, url) {
     container.textContent = "Loading...";
 
-    let res;
-    try {
-      res = await fetch(url, { cache: "no-store" });
-    } catch {
-      container.textContent = "❌ Failed to load PGN";
-      return;
-    }
-
-    if (!res.ok) {
-      container.textContent = "❌ Failed to load PGN";
-      return;
-    }
-
+    const res = await fetch(url, { cache: "no-store" });
     const text = await res.text();
-    const puzzles = splitIntoPgnGames(text)
-      .map(parseGame)
-      .filter((p) => p.moves.length);
 
+    const puzzles = splitIntoPgnGames(text).map(parseGame);
     let index = 0;
 
     function renderCurrent() {
@@ -290,8 +260,10 @@
 
       const pgnMatch = raw.match(/PGN:\s*([^\s]+)/i);
       if (pgnMatch) {
-        const url = new URL(pgnMatch[1], window.location.href).href;
-        renderRemotePGN(wrap, url);
+        renderRemotePGN(
+          wrap,
+          new URL(pgnMatch[1], window.location.href).href
+        );
         return;
       }
 
