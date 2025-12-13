@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN viewer (STACKED + PAIRED MOVES)
+// pgn-guess.js — Guess-the-move PGN trainer (drag + button + feedback)
 // ============================================================================
 
 (function () {
@@ -11,8 +11,13 @@
 
   const C = window.PGNCore;
 
+  // --------------------------------------------------------------------------
+  // Styles
+  // --------------------------------------------------------------------------
+
   function ensureGuessStylesOnce() {
     if (document.getElementById("pgn-guess-style")) return;
+
     const style = document.createElement("style");
     style.id = "pgn-guess-style";
     style.textContent = `
@@ -20,10 +25,45 @@
       .pgn-move-no { margin-right: 0.3em; }
       .pgn-move-white { margin-right: 0.6em; }
       .pgn-move-black { margin-left: 0.3em; }
-      .pgn-guess-right .pgn-comment { font-weight: 400; margin-left: 1.2em; }
+
+      .pgn-guess-status {
+        margin-top: 0.4em;
+        font-weight: 700;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      .pgn-guess-board {
+        touch-action: manipulation;
+      }
+
+      .pgn-guess-board.flash-correct {
+        box-shadow: 0 0 0 4px #3fb950 inset;
+        animation: flash-green 0.35s ease;
+      }
+
+      .pgn-guess-board.flash-wrong {
+        box-shadow: 0 0 0 4px #f85149 inset;
+        animation: flash-red 0.35s ease;
+      }
+
+      @keyframes flash-green {
+        0%   { box-shadow: 0 0 0 0 #3fb950 inset; }
+        50%  { box-shadow: 0 0 0 6px #3fb950 inset; }
+        100% { box-shadow: 0 0 0 4px #3fb950 inset; }
+      }
+
+      @keyframes flash-red {
+        0%   { box-shadow: 0 0 0 0 #f85149 inset; }
+        50%  { box-shadow: 0 0 0 6px #f85149 inset; }
+        100% { box-shadow: 0 0 0 4px #f85149 inset; }
+      }
     `;
     document.head.appendChild(style);
   }
+
+  // --------------------------------------------------------------------------
 
   function safeChessboard(targetEl, options, tries = 30, onReady) {
     if (!targetEl) return null;
@@ -57,6 +97,10 @@
       .trim();
   }
 
+  // --------------------------------------------------------------------------
+  // Main class
+  // --------------------------------------------------------------------------
+
   class ReaderPGNView {
     constructor(src) {
       if (src.__pgnReaderRendered) return;
@@ -72,10 +116,14 @@
       this.index = -1;
       this.currentRow = null;
 
+      this.game = new Chess();
+
       this.build(src);
       this.parsePGN();
       this.initBoard();
     }
+
+    // ------------------------------------------------------------------------
 
     build(src) {
       const wrapper = document.createElement("div");
@@ -85,6 +133,7 @@
         <div class="pgn-guess-cols">
           <div class="pgn-guess-left">
             <div class="pgn-guess-board"></div>
+            <div class="pgn-guess-status"></div>
             <div class="pgn-guess-buttons">
               <button class="pgn-guess-btn pgn-guess-next">▶</button>
             </div>
@@ -98,7 +147,10 @@
       this.boardDiv = wrapper.querySelector(".pgn-guess-board");
       this.rightPane = wrapper.querySelector(".pgn-guess-right");
       this.nextBtn = wrapper.querySelector(".pgn-guess-next");
+      this.statusEl = wrapper.querySelector(".pgn-guess-status");
     }
+
+    // ------------------------------------------------------------------------
 
     parsePGN() {
       let raw = C.normalizeFigurines(this.rawText);
@@ -164,6 +216,8 @@
       }
     }
 
+    // ------------------------------------------------------------------------
+
     initBoard() {
       safeChessboard(
         this.boardDiv,
@@ -172,21 +226,117 @@
           orientation: this.flipBoard ? "black" : "white",
           draggable: false,
           pieceTheme: C.PIECE_THEME_URL,
-          moveSpeed: 200
+          moveSpeed: 200,
+          onDragStart: () => this.isGuessTurn(),
+          onDrop: (s, t) => this.onUserDrop(s, t)
         },
         30,
         (b) => {
           this.board = b;
+
           if (this.flipBoard && this.moves[0]?.isWhite) {
             this.index = 0;
+            this.game.move(this.moves[0].san, { sloppy: true });
             this.board.position(this.moves[0].fen, true);
             this.appendMove();
           }
+
+          this.updateUI();
         }
       );
 
       this.nextBtn.addEventListener("click", () => this.nextUserMove());
     }
+
+    // ------------------------------------------------------------------------
+
+    isGuessTurn() {
+      const next = this.moves[this.index + 1];
+      return next && next.isWhite !== this.userIsWhite;
+    }
+
+    updateUI() {
+      this.board.draggable = this.isGuessTurn();
+      if (this.isGuessTurn()) {
+        this.statusEl.textContent = "Your move";
+        this.statusEl.style.opacity = "1";
+      } else {
+        this.statusEl.textContent = "";
+        this.statusEl.style.opacity = "0";
+      }
+    }
+
+    flash(correct) {
+      const el = this.boardDiv;
+      el.classList.remove("flash-correct", "flash-wrong");
+      void el.offsetWidth;
+      el.classList.add(correct ? "flash-correct" : "flash-wrong");
+      setTimeout(() => {
+        el.classList.remove("flash-correct", "flash-wrong");
+      }, 400);
+
+      if (navigator.vibrate) {
+        navigator.vibrate(correct ? 30 : [20, 40, 20]);
+      }
+    }
+
+    // ------------------------------------------------------------------------
+
+    onUserDrop(source, target) {
+      if (!this.isGuessTurn()) return "snapback";
+
+      const expected = this.moves[this.index + 1];
+      const legal = this.game.moves({ verbose: true });
+
+      const isCorrect = legal.some(m => {
+        if (m.from !== source || m.to !== target) return false;
+        const test = new Chess(this.game.fen());
+        test.move(m);
+        return test.fen() === expected.fen;
+      });
+
+      if (!isCorrect) {
+        this.flash(false);
+        return "snapback";
+      }
+
+      this.flash(true);
+      this.index++;
+      this.game.load(expected.fen);
+      this.board.position(expected.fen, true);
+      this.appendMove();
+      this.autoAdvance();
+      return;
+    }
+
+    // ------------------------------------------------------------------------
+
+    autoAdvance() {
+      while (this.index + 1 < this.moves.length) {
+        const next = this.moves[this.index + 1];
+        if (next.isWhite !== this.userIsWhite) break;
+
+        this.index++;
+        this.game.move(next.san, { sloppy: true });
+        this.board.position(next.fen, true);
+        this.appendMove();
+      }
+      this.updateUI();
+    }
+
+    nextUserMove() {
+      if (this.isGuessTurn()) return;
+
+      if (this.index + 1 >= this.moves.length) return;
+
+      this.index++;
+      this.game.move(this.moves[this.index].san, { sloppy: true });
+      this.board.position(this.moves[this.index].fen, true);
+      this.appendMove();
+      this.autoAdvance();
+    }
+
+    // ------------------------------------------------------------------------
 
     appendMove() {
       const m = this.moves[this.index];
@@ -205,7 +355,6 @@
 
         row.appendChild(no);
         row.appendChild(w);
-
         this.rightPane.appendChild(row);
         this.currentRow = row;
       } else if (this.currentRow) {
@@ -224,31 +373,17 @@
 
       this.rightPane.scrollTop = this.rightPane.scrollHeight;
     }
-
-    nextUserMove() {
-      if (this.index + 1 >= this.moves.length) return;
-
-      this.index++;
-      this.board.position(this.moves[this.index].fen, true);
-      this.appendMove();
-
-      while (this.index + 1 < this.moves.length) {
-        const next = this.moves[this.index + 1];
-        if (next.isWhite === this.userIsWhite) break;
-
-        this.index++;
-        this.board.position(next.fen, true);
-        this.appendMove();
-      }
-    }
   }
+
+  // --------------------------------------------------------------------------
 
   function init() {
     document.querySelectorAll("pgn-guess, pgn-guess-black")
-      .forEach((el) => new ReaderPGNView(el));
+      .forEach(el => new ReaderPGNView(el));
   }
 
   document.readyState === "loading"
     ? document.addEventListener("DOMContentLoaded", init, { once: true })
     : init();
+
 })();
