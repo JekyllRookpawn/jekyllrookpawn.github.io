@@ -16,5 +16,5 @@ Moves: Nxb5 cxb5 Bxb5+ Nbd7 O-O-O Rd8 Rxd7 Rxd7 Rd1 Qe6 Bxd7 Nxd7 Qb8+ Nxb8 Rd8#
 ### Multi-puzzle pack from remote PGN file:
 
 <puzzle>
-PGN: https://raw.githubusercontent.com/xinyangz/chess-tactics-pgn/refs/heads/master/tactics.pgn
+PGN: {{ "/assets/pgn/puzzle-sample.pgn" | prepend: full_base_url }}
 </puzzle>
