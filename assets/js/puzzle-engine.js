@@ -69,27 +69,18 @@
     return s.replace(/[♔♕♖♗♘♙]/g, "");
   }
 
-  /**
-   * Parse PGN moves and STOP at '*'
-   */
   function parsePGNMoves(pgn) {
-    const tokens = pgn
+    return pgn
       .replace(/\[[^\]]*\]/g, " ")
       .replace(/\{[^}]*\}/g, " ")
       .replace(/\([^)]*\)/g, " ")
       .replace(/\b\d+\.\.\./g, " ")
       .replace(/\b\d+\.(?:\.\.)?/g, " ")
+      .replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .split(" ");
-
-    const moves = [];
-    for (const t of tokens) {
-      if (t === "*") break;               // ⭐ FIX
-      if (/^(1-0|0-1|1\/2-1\/2)$/.test(t)) break;
-      moves.push(t);
-    }
-    return moves;
+      .split(" ")
+      .filter(Boolean);
   }
 
   function normalizeSAN(san) {
@@ -177,7 +168,9 @@
 
       step++;
       showCorrect(feedback);
+      updateTurn(turnDiv, game, solved);
 
+      // If user's move finishes the line → solved now
       if (step >= solution.length) {
         solved = true;
         showSolved(feedback);
@@ -185,12 +178,20 @@
         return true;
       }
 
+      // Auto reply
       game.move(sanMoves[step], { sloppy: true });
       step++;
 
       setTimeout(() => {
         board.position(game.fen(), true);
         updateTurn(turnDiv, game, solved);
+
+        // If auto move finishes the line → solved now
+        if (step >= solution.length || game.game_over()) {
+          solved = true;
+          showSolved(feedback);
+          updateTurn(turnDiv, game, solved);
+        }
       }, 200);
 
       return true;
@@ -200,7 +201,7 @@
   }
 
   // =====================================================================
-  // Remote PGN — FIXED '*' end-of-puzzle detection
+  // Remote PGN — lazy batch loader (WORKING SOLVED LOGIC)
   // =====================================================================
 
   function initRemotePGNPackLazy(container, url) {
@@ -254,6 +255,7 @@
           for (let i = parsedUntil; i < end; i++) {
             const fen = games[i].match(/\[FEN\s+"([^"]+)"/)?.[1];
             if (!fen) continue;
+
             const san = parsePGNMoves(games[i]);
             if (san.length) puzzles.push({ fen, san });
           }
@@ -299,8 +301,9 @@
 
           step++;
           showCorrect(feedback);
+          updateTurn(turnDiv, game, solved);
 
-          // ⭐ FIX: '*' means puzzle ends here
+          // If user's move finishes the line → solved now
           if (step >= sanMoves.length) {
             solved = true;
             showSolved(feedback);
@@ -308,12 +311,20 @@
             return true;
           }
 
+          // Auto reply
           game.move(sanMoves[step], { sloppy: true });
           step++;
 
           setTimeout(() => {
             board.position(game.fen(), true);
             updateTurn(turnDiv, game, solved);
+
+            // If auto move finishes the line (or ends game) → solved now
+            if (step >= sanMoves.length || game.game_over()) {
+              solved = true;
+              showSolved(feedback);
+              updateTurn(turnDiv, game, solved);
+            }
           }, 200);
 
           return true;
@@ -331,7 +342,7 @@
   }
 
   // --------------------------------------------------------------------
-  // Global safety
+  // Global safety (Jekyll / cache-safe)
   // --------------------------------------------------------------------
   window.renderLocalPuzzle = renderLocalPuzzle;
   window.initRemotePGNPackLazy = initRemotePGNPackLazy;
