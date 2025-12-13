@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (drag-enabled, gated by turn)
+// pgn-guess.js — Guess-the-move PGN trainer (fully fixed turn logic)
 // ============================================================================
 
 (function () {
@@ -223,23 +223,18 @@
         {
           position: "start",
           orientation: this.flipBoard ? "black" : "white",
-          draggable: true,                 // ✅ ALWAYS TRUE
+          draggable: true,
           pieceTheme: C.PIECE_THEME_URL,
           moveSpeed: 200,
-          onDragStart: () => this.isGuessTurn(),  // ✅ gate dragging here
+          onDragStart: () => this.isGuessTurn(),
           onDrop: (s, t) => this.onUserDrop(s, t)
         },
         30,
         (b) => {
           this.board = b;
 
-          if (this.flipBoard && this.moves[0]?.isWhite) {
-            this.index = 0;
-            this.game.move(this.moves[0].san, { sloppy: true });
-            this.board.position(this.moves[0].fen, true);
-            this.appendMove();
-          }
-
+          // ✅ autoplay until first user-guess position
+          this.autoAdvance();
           this.updateUI();
         }
       );
