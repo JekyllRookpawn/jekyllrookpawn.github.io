@@ -1,11 +1,13 @@
 // ============================================================================
 // pgn-guess.js — Guess-the-move PGN viewer (single-move display)
-// Features:
+// Final features:
 //   - Header above board
 //   - Single-move display in right pane
 //   - Correct comment attachment
 //   - Bold move line only
 //   - Board flips for <pgn-guess-black>
+//   - ONLY next-move button
+//   - Animate ONLY opponent's moves
 // ============================================================================
 
 (function () {
@@ -85,7 +87,7 @@
 
       this.build();
       this.parsePGN();
-      this.initBoardAndControls();
+      this.initBoard();
       this.renderRightPane();
     }
 
@@ -125,7 +127,6 @@
         '<div class="pgn-guess-left">' +
           '<div class="pgn-guess-board"></div>' +
           '<div class="pgn-guess-buttons">' +
-            '<button class="pgn-guess-btn pgn-guess-prev" type="button">◀</button>' +
             '<button class="pgn-guess-btn pgn-guess-next" type="button">▶</button>' +
           '</div>' +
         '</div>' +
@@ -138,6 +139,7 @@
 
       this.boardDiv = this.wrapper.querySelector(".pgn-guess-board");
       this.rightPane = this.wrapper.querySelector(".pgn-guess-right");
+      this.nextBtn = this.wrapper.querySelector(".pgn-guess-next");
     }
 
     // ---------- PGN PARSER ---------------------------------------------------
@@ -222,8 +224,8 @@
       }
     }
 
-    // ---------- BOARD & CONTROLS --------------------------------------------
-    initBoardAndControls() {
+    // ---------- BOARD --------------------------------------------------------
+    initBoard() {
       safeChessboard(
         this.boardDiv,
         {
@@ -237,10 +239,7 @@
         (b) => (this.board = b)
       );
 
-      this.wrapper.querySelector(".pgn-guess-next")
-        .addEventListener("click", () => this.next());
-      this.wrapper.querySelector(".pgn-guess-prev")
-        .addEventListener("click", () => this.prev());
+      this.nextBtn.addEventListener("click", () => this.next());
     }
 
     // ---------- RIGHT PANE ---------------------------------------------------
@@ -269,29 +268,17 @@
       if (this.index + 1 >= this.moves.length) return;
       this.index++;
 
-      const apply = () => {
-        if (!this.board || typeof this.board.position !== "function") {
-          requestAnimationFrame(apply);
-          return;
-        }
-        this.board.position(this.moves[this.index].fen, true);
-      };
-      apply();
-
-      this.renderRightPane();
-    }
-
-    prev() {
-      if (this.index < 0) return;
-      this.index--;
+      const isWhiteMove = this.index % 2 === 0;
+      const animate =
+        (this.flipBoard && isWhiteMove) ||
+        (!this.flipBoard && !isWhiteMove);
 
       const apply = () => {
         if (!this.board || typeof this.board.position !== "function") {
           requestAnimationFrame(apply);
           return;
         }
-        if (this.index < 0) this.board.position("start", true);
-        else this.board.position(this.moves[this.index].fen, true);
+        this.board.position(this.moves[this.index].fen, animate);
       };
       apply();
 
