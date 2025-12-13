@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (FINAL, CORRECT)
+// pgn-guess.js — Guess-the-move PGN trainer (FINAL, with animation control)
 // ============================================================================
 
 (function () {
@@ -99,7 +99,6 @@
       .trim();
   }
 
-  // ✅ CRITICAL: normalize SAN before feeding to chess.js
   function normalizeSAN(tok) {
     return tok
       .replace(/\[%.*?]/g, "")
@@ -134,8 +133,6 @@
       this.initBoard();
     }
 
-    // ------------------------------------------------------------------------
-
     build(src) {
       const wrapper = document.createElement("div");
       wrapper.className = "pgn-guess-cols";
@@ -154,8 +151,6 @@
       this.statusEl = wrapper.querySelector(".pgn-guess-status");
       this.rightPane = wrapper.querySelector(".pgn-guess-right");
     }
-
-    // ------------------------------------------------------------------------
 
     parsePGN() {
       let raw = C.normalizeFigurines(this.rawText);
@@ -208,16 +203,14 @@
         this.moves.push({
           isWhite: ply % 2 === 0,
           moveNo: Math.floor(ply / 2) + 1,
-          san: tok,              // display SAN
-          fen: chess.fen(),      // ✅ correct position
+          san: tok,
+          fen: chess.fen(),
           comments: pending.splice(0)
         });
 
         ply++;
       }
     }
-
-    // ------------------------------------------------------------------------
 
     initBoard() {
       safeChessboard(
@@ -227,6 +220,7 @@
           orientation: this.flipBoard ? "black" : "white",
           draggable: true,
           pieceTheme: C.PIECE_THEME_URL,
+          moveSpeed: 200,
           onDragStart: () => this.isGuessTurn(),
           onDrop: (s, t) => this.onUserDrop(s, t)
         },
@@ -239,8 +233,6 @@
       );
     }
 
-    // ------------------------------------------------------------------------
-
     autoplayUntilUserTurn() {
       while (this.index + 1 < this.moves.length) {
         const next = this.moves[this.index + 1];
@@ -248,7 +240,7 @@
 
         this.index++;
         this.game.move(normalizeSAN(next.san), { sloppy: true });
-        this.board.position(next.fen, true);
+        this.board.position(next.fen, true); // ✅ animated
         this.appendMove();
       }
     }
@@ -281,7 +273,7 @@
 
       this.index++;
       this.game.load(expected.fen);
-      this.board.position(expected.fen, true);
+      this.board.position(expected.fen, false); // ⛔ NO animation
       this.appendMove();
       this.autoplayUntilUserTurn();
       this.updateUI();
@@ -324,8 +316,6 @@
       this.rightPane.scrollTop = this.rightPane.scrollHeight;
     }
   }
-
-  // --------------------------------------------------------------------------
 
   function init() {
     document.querySelectorAll("pgn-guess, pgn-guess-black")
