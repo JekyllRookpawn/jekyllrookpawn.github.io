@@ -1,10 +1,9 @@
 // ============================================================================
 // pgn-guess.js — Guess-the-move PGN viewer
-// FINAL, CORRECT BEHAVIOR:
-//   - ▶ always plays the next move on the board
-//   - Opponent moves auto-advance
-//   - User move is shown + played
-//   - <pgn-guess-black> starts after White's first move
+// FINAL AUTOPLAY RULE:
+//   - <pgn-guess-black> → ALL White moves autoplay
+//   - <pgn-guess>       → ALL Black moves autoplay
+//   - ▶ always plays ONE user move + all opponent replies
 // ============================================================================
 
 (function () {
@@ -192,7 +191,7 @@
         (b) => {
           this.board = b;
 
-          // <pgn-guess-black> → auto-play White's first move
+          // autoplay first White move for <pgn-guess-black>
           if (this.flipBoard && this.moves[0]?.isWhite) {
             this.index = 0;
             this.board.position(this.moves[0].fen, true);
@@ -222,20 +221,21 @@
     }
 
     nextUserMove() {
-      while (true) {
-        if (this.index + 1 >= this.moves.length) return;
+      if (this.index + 1 >= this.moves.length) return;
+
+      // play user's move
+      this.index++;
+      let m = this.moves[this.index];
+      this.board.position(m.fen, true);
+      this.renderRightPane();
+
+      // autoplay ALL opponent replies
+      while (this.index + 1 < this.moves.length) {
+        const next = this.moves[this.index + 1];
+        if (next.isWhite === this.userIsWhite) break;
+
         this.index++;
-
-        const m = this.moves[this.index];
-        const isUserMove = m.isWhite === this.userIsWhite;
-
-        // ALWAYS play the move
-        this.board.position(m.fen, true);
-
-        if (!isUserMove) continue;
-
-        this.renderRightPane();
-        return;
+        this.board.position(next.fen, true);
       }
     }
   }
