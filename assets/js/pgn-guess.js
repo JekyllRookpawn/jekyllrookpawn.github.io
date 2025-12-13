@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN viewer (FINAL)
+// pgn-guess.js — Guess-the-move PGN viewer (STACKING MODE - FINAL)
 // ============================================================================
 
 (function () {
@@ -20,8 +20,8 @@
     const style = document.createElement("style");
     style.id = "pgn-guess-style";
     style.textContent = `
-      .pgn-guess-current-move { font-weight: 900 !important; }
-      .pgn-guess-right .pgn-comment { font-weight: 400 !important; }
+      .pgn-guess-move { font-weight: 900; margin-top: 0.5em; }
+      .pgn-guess-right .pgn-comment { font-weight: 400; margin-left: 0.5em; }
     `;
     document.head.appendChild(style);
   }
@@ -49,16 +49,14 @@
     }
   }
 
-  // ---- VARIATION EXTRACTION (FINAL, CORRECT) -------------------------------
+  // ---- VARIATION EXTRACTION (FINAL) ----------------------------------------
   function extractVariationDisplay(text) {
-    text = text
+    return text
       .replace(/\[%.*?]/g, "")
       .replace(/\[D\]/g, "")
       .replace(/\{\s*\}/g, "")
       .replace(/\s+/g, " ")
       .trim();
-
-    return text;
   }
 
   class ReaderPGNView {
@@ -82,46 +80,29 @@
 
     buildHeaderContent(h) {
       const H = document.createElement("h3");
-      const W =
-        (h.WhiteTitle ? h.WhiteTitle + " " : "") +
-        C.flipName(h.White || "") +
-        (h.WhiteElo ? " (" + h.WhiteElo + ")" : "");
-      const B =
-        (h.BlackTitle ? h.BlackTitle + " " : "") +
-        C.flipName(h.Black || "") +
-        (h.BlackElo ? " (" + h.BlackElo + ")" : "");
-      const Y = C.extractYear(h.Date);
-      const line = (h.Event || "") + (Y ? ", " + Y : "");
-      appendText(H, W + " – " + B);
-      H.appendChild(document.createElement("br"));
-      appendText(H, line);
+      appendText(
+        H,
+        `${C.flipName(h.White || "")} – ${C.flipName(h.Black || "")}`
+      );
       return H;
     }
 
     build(src) {
-      const chess = new Chess();
-      try { chess.load_pgn(this.rawText, { sloppy: true }); } catch {}
-      const headers = chess.header ? chess.header() : {};
-
       const wrapper = document.createElement("div");
       wrapper.className = "pgn-guess-block";
 
-      const header = document.createElement("div");
-      header.className = "pgn-guess-header";
-      header.appendChild(this.buildHeaderContent(headers));
-
       const cols = document.createElement("div");
       cols.className = "pgn-guess-cols";
-      cols.innerHTML =
-        '<div class="pgn-guess-left">' +
-          '<div class="pgn-guess-board"></div>' +
-          '<div class="pgn-guess-buttons">' +
-            '<button class="pgn-guess-btn pgn-guess-next">▶</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="pgn-guess-right"></div>';
+      cols.innerHTML = `
+        <div class="pgn-guess-left">
+          <div class="pgn-guess-board"></div>
+          <div class="pgn-guess-buttons">
+            <button class="pgn-guess-btn pgn-guess-next">▶</button>
+          </div>
+        </div>
+        <div class="pgn-guess-right"></div>
+      `;
 
-      wrapper.appendChild(header);
       wrapper.appendChild(cols);
       src.replaceWith(wrapper);
 
@@ -147,15 +128,14 @@
         const ch = raw[i];
 
         if (ch === "(") {
-          let depth = 1;
-          let j = i + 1;
+          let depth = 1, j = i + 1;
           while (j < raw.length && depth > 0) {
             if (raw[j] === "(") depth++;
             else if (raw[j] === ")") depth--;
             j++;
           }
-          const display = extractVariationDisplay(raw.slice(i + 1, j - 1));
-          if (display) attach(display);
+          const v = extractVariationDisplay(raw.slice(i + 1, j - 1));
+          if (v) attach(v);
           i = j;
           continue;
         }
@@ -175,7 +155,6 @@
         const tok = raw.slice(s, i);
 
         if (/^\d+\.{1,3}$/.test(tok)) continue;
-        if (/^(1-0|0-1|½-½|\*)$/.test(tok)) continue;
 
         const core = tok.replace(/[^a-hKQRBN0-9=O0-]+$/g, "").replace(/0/g, "O");
         if (!C.SAN_CORE_REGEX.test(core)) continue;
@@ -186,7 +165,7 @@
 
         this.moves.push({
           isWhite,
-          label: isWhite ? `${num}. ${tok}` : `${num}... ${tok}`,
+          label: isWhite ? `${num}. ${tok}` : tok,
           fen: chess.fen(),
           comments: pending.splice(0)
         });
@@ -211,7 +190,7 @@
           if (this.flipBoard && this.moves[0]?.isWhite) {
             this.index = 0;
             this.board.position(this.moves[0].fen, true);
-            this.renderRightPane();
+            this.appendMove();
           }
         }
       );
@@ -219,14 +198,11 @@
       this.nextBtn.addEventListener("click", () => this.nextUserMove());
     }
 
-    renderRightPane() {
-      this.rightPane.innerHTML = "";
-      if (this.index < 0) return;
-
+    appendMove() {
       const m = this.moves[this.index];
 
       const moveDiv = document.createElement("div");
-      moveDiv.className = "pgn-guess-current-move";
+      moveDiv.className = "pgn-guess-move";
       moveDiv.textContent = m.label;
       this.rightPane.appendChild(moveDiv);
 
@@ -236,22 +212,27 @@
         p.textContent = c;
         this.rightPane.appendChild(p);
       });
+
+      // auto-scroll
+      this.rightPane.scrollTop = this.rightPane.scrollHeight;
     }
 
     nextUserMove() {
       if (this.index + 1 >= this.moves.length) return;
 
+      // user move
       this.index++;
       this.board.position(this.moves[this.index].fen, true);
-      this.renderRightPane();
+      this.appendMove();
 
+      // autoplay opponent replies
       while (this.index + 1 < this.moves.length) {
         const next = this.moves[this.index + 1];
         if (next.isWhite === this.userIsWhite) break;
 
         this.index++;
         this.board.position(next.fen, true);
-        this.renderRightPane();
+        this.appendMove();
       }
     }
   }
