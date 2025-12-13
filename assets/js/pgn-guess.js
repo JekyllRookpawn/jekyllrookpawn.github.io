@@ -1,8 +1,10 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN viewer (single-move display)
-// FINAL INITIALIZATION RULES:
-//   - <pgn-guess>        → start from initial position
-//   - <pgn-guess-black>  → auto-play White's first move on load
+// pgn-guess.js — Guess-the-move PGN viewer
+// FINAL, CORRECT BEHAVIOR:
+//   - ▶ always plays the next move on the board
+//   - Opponent moves auto-advance
+//   - User move is shown + played
+//   - <pgn-guess-black> starts after White's first move
 // ============================================================================
 
 (function () {
@@ -59,7 +61,6 @@
 
       ensureGuessStylesOnce();
 
-      this.sourceEl = src;
       this.rawText = (src.textContent || "").trim();
       this.flipBoard = src.tagName.toLowerCase() === "pgn-guess-black";
       this.userIsWhite = !this.flipBoard;
@@ -67,7 +68,7 @@
       this.moves = [];
       this.index = -1;
 
-      this.build();
+      this.build(src);
       this.parsePGN();
       this.initBoard();
     }
@@ -90,10 +91,13 @@
       return H;
     }
 
-    build() {
+    build(src) {
       const chess = new Chess();
       try { chess.load_pgn(this.rawText, { sloppy: true }); } catch {}
       const headers = chess.header ? chess.header() : {};
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "pgn-guess-block";
 
       const header = document.createElement("div");
       header.className = "pgn-guess-header";
@@ -110,12 +114,9 @@
         '</div>' +
         '<div class="pgn-guess-right"></div>';
 
-      const wrapper = document.createElement("div");
-      wrapper.className = "pgn-guess-block";
       wrapper.appendChild(header);
       wrapper.appendChild(cols);
-
-      this.sourceEl.replaceWith(wrapper);
+      src.replaceWith(wrapper);
 
       this.boardDiv = wrapper.querySelector(".pgn-guess-board");
       this.rightPane = wrapper.querySelector(".pgn-guess-right");
@@ -164,8 +165,7 @@
 
         const isWhite = ply % 2 === 0;
         const num = Math.floor(ply / 2) + 1;
-        const mv = chess.move(core, { sloppy: true });
-        if (!mv) continue;
+        if (!chess.move(core, { sloppy: true })) continue;
 
         this.moves.push({
           isWhite,
@@ -192,8 +192,8 @@
         (b) => {
           this.board = b;
 
-          // ⭐ INITIAL AUTO-PLAY RULE
-          if (this.flipBoard && this.moves.length && this.moves[0].isWhite) {
+          // <pgn-guess-black> → auto-play White's first move
+          if (this.flipBoard && this.moves[0]?.isWhite) {
             this.index = 0;
             this.board.position(this.moves[0].fen, true);
           }
@@ -229,10 +229,10 @@
         const m = this.moves[this.index];
         const isUserMove = m.isWhite === this.userIsWhite;
 
-        if (!isUserMove) {
-          this.board.position(m.fen, true);
-          continue;
-        }
+        // ALWAYS play the move
+        this.board.position(m.fen, true);
+
+        if (!isUserMove) continue;
 
         this.renderRightPane();
         return;
