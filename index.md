@@ -2,6 +2,8 @@
 layout: home
 ---
 
+### Components
+
 **figurine.js** replaces piece letters in chess notation (like K, Q, R, B, N) with their figurine Unicode symbols (♔♕♖♗♘) in all visible text on the page. It scans all text nodes in the document for Standard Algebraic Notation (SAN) patterns and replaces the letters with the matching chess figurine.
 
 **fen.js** converts custom `<fen>` HTML tags into visual chess diagrams. Detects `<fen>` tags and turns them into boards rendered with the **chessboard.js** library. You can type `[D]` in PGN comments to insert diagrams, and use the frontmatter `FEN:` to use a diagram as a post image on the homepage.
