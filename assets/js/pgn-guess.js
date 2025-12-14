@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (FINAL UI icons)
+// pgn-guess.js — Guess-the-move PGN trainer (FINAL, eval/clk stripped)
 // ============================================================================
 
 (function () {
@@ -26,10 +26,7 @@
       .pgn-guess-cols { display:flex; gap:1rem; align-items:flex-start; }
       .pgn-guess-board { width:360px; touch-action:manipulation; }
       .pgn-guess-status { margin-top:.4em; font-size:.95em; white-space:nowrap; }
-      .pgn-guess-status button {
-        font-size:1em;
-        padding:0 .4em;
-      }
+      .pgn-guess-status button { margin-left:.3em; font-size:.9em; }
       .pgn-guess-right { flex:1; max-height:420px; overflow-y:auto; }
 
       .pgn-move-row { font-weight:900; margin-top:.5em; }
@@ -41,12 +38,21 @@
     document.head.appendChild(style);
   }
 
+  // --------------------------------------------------------------------------
+
   function normalizeSAN(tok) {
     return tok
       .replace(/\[%.*?]/g, "")
       .replace(/[!?]+/g, "")
       .replace(/[+#]$/, "")
       .replace(/0/g, "O")
+      .trim();
+  }
+
+  function sanitizeComment(text) {
+    return (text || "")
+      .replace(/\[%.*?]/g, "")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
@@ -96,7 +102,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // SAFE PGN PARSER
+    // SAFE PGN PARSER (eval/clk stripped)
     // ------------------------------------------------------------------------
 
     parsePGN() {
@@ -108,9 +114,10 @@
       let pending = [];
 
       const attach = (t) => {
-        if (!t) return;
-        if (this.moves.length) this.moves[this.moves.length - 1].comments.push(t);
-        else pending.push(t);
+        const c = sanitizeComment(t);
+        if (!c) return;
+        if (this.moves.length) this.moves[this.moves.length - 1].comments.push(c);
+        else pending.push(c);
       };
 
       while (i < raw.length) {
@@ -201,8 +208,6 @@
     }
 
     // ------------------------------------------------------------------------
-    // STATUS + ICON BUTTONS
-    // ------------------------------------------------------------------------
 
     updateStatus() {
       this.statusEl.innerHTML = "";
@@ -253,8 +258,6 @@
     }
 
     // ------------------------------------------------------------------------
-    // USER DROP (FIXED)
-    // ------------------------------------------------------------------------
 
     onUserDrop(source, target) {
       if (source === target) return "snapback";
@@ -296,8 +299,6 @@
         this.updateStatus();
       }, FEEDBACK_DELAY);
     }
-
-    // ------------------------------------------------------------------------
 
     appendMove() {
       const m = this.moves[this.index];
