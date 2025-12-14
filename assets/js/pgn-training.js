@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-training.js — Guess-the-move PGN trainer (CLEAN, FINAL, COMMENT-SAFE)
+// pgn-training.js — Guess-the-move PGN trainer (literature-correct mainline)
 // ============================================================================
 
 (function () {
@@ -26,11 +26,7 @@
       .pgn-training-wrapper { margin-bottom: 1rem; }
       .pgn-training-header { margin:0 0 .6rem 0; font-weight:600; }
 
-      .pgn-training-cols {
-        display:flex;
-        gap:1rem;
-        align-items:flex-start;
-      }
+      .pgn-training-cols { display:flex; gap:1rem; align-items:flex-start; }
 
       .pgn-training-board {
         width:360px;
@@ -60,10 +56,7 @@
       .pgn-move-no { margin-right:.3em; }
       .pgn-move-white { margin-right:.6em; }
       .pgn-move-black { margin-left:.3em; }
-
-      .pgn-comment {
-        font-weight:400;
-      }
+      .pgn-comment { font-weight:400; }
     `;
     document.head.appendChild(style);
   }
@@ -76,6 +69,7 @@
     return tok
       .replace(/\[%.*?]/g, "")
       .replace(/\[D\]/g, "")
+      .replace(/[{}]/g, "")
       .replace(/[!?]+/g, "")
       .replace(/[+#]$/, "")
       .replace(/0/g, "O")
@@ -83,22 +77,20 @@
   }
 
   function sanitizeComment(text) {
-  const c = (text || "")
-    .replace(/\[%.*?]/g, "")     // engine tags
-    .replace(/\[D\]/g, "")       // [D]
-    .replace(/[{}]/g, "")        // 🔴 REMOVE ALL BRACES
-    .replace(/\s+/g, " ")
-    .trim();
+    const c = (text || "")
+      .replace(/\[%.*?]/g, "")
+      .replace(/\[D\]/g, "")
+      .replace(/[{}]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
 
-  return c || null;
-}
-
+    return c || null;
+  }
 
   function parseHeaders(text) {
     const headers = {};
     (text || "").replace(/\[(\w+)\s+"([^"]*)"\]/g, (_, k, v) => {
       headers[k] = v;
-      return "";
     });
     return headers;
   }
@@ -225,17 +217,12 @@
 
       const attach = (t) => {
         const c = sanitizeComment(t);
-
         if (c === null) {
           pending.length = 0;
           return;
         }
-
-        if (this.moves.length) {
-          this.moves[this.moves.length - 1].comments.push(c);
-        } else {
-          pending.push(c);
-        }
+        if (this.moves.length) this.moves[this.moves.length - 1].comments.push(c);
+        else pending.push(c);
       };
 
       while (i < raw.length) {
@@ -417,6 +404,11 @@
       }, FEEDBACK_DELAY);
     }
 
+    formatBlackReplyAfterComment(moveNo, san) {
+      if (/^\d+\.\.\./.test(san)) return san;
+      return `${moveNo}... ${san}`;
+    }
+
     appendMove() {
       const m = this.moves[this.index];
       if (!m) return;
@@ -424,25 +416,48 @@
       if (m.isWhite) {
         const row = document.createElement("div");
         row.className = "pgn-move-row";
-        row.innerHTML =
-          `<span class="pgn-move-no">${m.moveNo}.</span>` +
-          `<span class="pgn-move-white">${m.san}</span>`;
+
+        const no = document.createElement("span");
+        no.className = "pgn-move-no";
+        no.textContent = `${m.moveNo}.`;
+
+        const w = document.createElement("span");
+        w.className = "pgn-move-white";
+        w.textContent = m.san;
+
+        row.appendChild(no);
+        row.appendChild(w);
         this.rightPane.appendChild(row);
         this.currentRow = row;
+
+        if (m.comments.length) {
+          m.comments.forEach(c => {
+            const span = document.createElement("span");
+            span.className = "pgn-comment";
+            span.textContent = " " + c;
+            row.appendChild(span);
+          });
+
+          const next = this.moves[this.index + 1];
+          if (next && !next.isWhite) {
+            const b = document.createElement("span");
+            b.className = "pgn-move-black";
+            b.textContent =
+              " " + this.formatBlackReplyAfterComment(m.moveNo, next.san);
+            row.appendChild(b);
+
+            this.index++;
+            this.game.load(next.fen);
+            this.currentFen = next.fen;
+          }
+        }
+
       } else if (this.currentRow) {
         const b = document.createElement("span");
         b.className = "pgn-move-black";
         b.textContent = m.san;
         this.currentRow.appendChild(b);
       }
-
-      // INLINE comments
-      m.comments.forEach(c => {
-        const span = document.createElement("span");
-        span.className = "pgn-comment";
-        span.textContent = " " + c;
-        if (this.currentRow) this.currentRow.appendChild(span);
-      });
 
       this.rightPane.scrollTop = this.rightPane.scrollHeight;
     }
