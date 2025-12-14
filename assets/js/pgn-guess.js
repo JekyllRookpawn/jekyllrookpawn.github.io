@@ -1,5 +1,5 @@
 // ============================================================================
-// pgn-guess.js — Guess-the-move PGN trainer (FINAL, eval/clk stripped)
+// pgn-guess.js — Guess-the-move PGN trainer (FINAL + Opening header)
 // ============================================================================
 
 (function () {
@@ -23,21 +23,55 @@
     const style = document.createElement("style");
     style.id = "pgn-guess-style";
     style.textContent = `
-      .pgn-guess-cols { display:flex; gap:1rem; align-items:flex-start; }
-      .pgn-guess-board { width:360px; touch-action:manipulation; }
-      .pgn-guess-status { margin-top:.4em; font-size:.95em; white-space:nowrap; }
-      .pgn-guess-status button { margin-left:.3em; font-size:.9em; }
-      .pgn-guess-right { flex:1; max-height:420px; overflow-y:auto; }
+      .pgn-guess-wrapper {
+        display: block;
+        margin-bottom: 1rem;
+      }
 
-      .pgn-move-row { font-weight:900; margin-top:.5em; }
-      .pgn-move-no { margin-right:.3em; }
-      .pgn-move-white { margin-right:.6em; }
-      .pgn-move-black { margin-left:.3em; }
-      .pgn-comment { font-weight:400; margin:.35em 0; }
+      .pgn-guess-header {
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+      }
+
+      .pgn-guess-cols {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+
+      .pgn-guess-board {
+        width: 360px;
+        touch-action: manipulation;
+      }
+
+      .pgn-guess-status {
+        margin-top: .4em;
+        font-size: .95em;
+        white-space: nowrap;
+      }
+
+      .pgn-guess-status button {
+        margin-left: .3em;
+        font-size: .9em;
+      }
+
+      .pgn-guess-right {
+        flex: 1;
+        max-height: 420px;
+        overflow-y: auto;
+      }
+
+      .pgn-move-row { font-weight: 900; margin-top: .5em; }
+      .pgn-move-no { margin-right: .3em; }
+      .pgn-move-white { margin-right: .6em; }
+      .pgn-move-black { margin-left: .3em; }
+      .pgn-comment { font-weight: 400; margin: .35em 0; }
     `;
     document.head.appendChild(style);
   }
 
+  // --------------------------------------------------------------------------
+  // Helpers
   // --------------------------------------------------------------------------
 
   function normalizeSAN(tok) {
@@ -56,6 +90,13 @@
       .trim();
   }
 
+  function extractOpeningHeader(text) {
+    const m = text.match(/\[Opening\s+"([^"]+)"\]/i);
+    return m ? m[1].trim() : null;
+  }
+
+  // --------------------------------------------------------------------------
+  // Main class
   // --------------------------------------------------------------------------
 
   class ReaderPGNView {
@@ -63,6 +104,8 @@
       ensureGuessStylesOnce();
 
       this.rawText = (src.textContent || "").trim();
+      this.openingName = extractOpeningHeader(this.rawText);
+
       this.flipBoard = src.tagName.toLowerCase() === "pgn-guess-black";
       this.userIsWhite = !this.flipBoard;
 
@@ -83,10 +126,19 @@
     // ------------------------------------------------------------------------
 
     build(src) {
-      const wrap = document.createElement("div");
-      wrap.className = "pgn-guess-cols";
+      const wrapper = document.createElement("div");
+      wrapper.className = "pgn-guess-wrapper";
 
-      wrap.innerHTML = `
+      if (this.openingName) {
+        const header = document.createElement("div");
+        header.className = "pgn-guess-header";
+        header.textContent = this.openingName;
+        wrapper.appendChild(header);
+      }
+
+      const cols = document.createElement("div");
+      cols.className = "pgn-guess-cols";
+      cols.innerHTML = `
         <div>
           <div class="pgn-guess-board"></div>
           <div class="pgn-guess-status"></div>
@@ -94,23 +146,23 @@
         <div class="pgn-guess-right"></div>
       `;
 
-      src.replaceWith(wrap);
+      wrapper.appendChild(cols);
+      src.replaceWith(wrapper);
 
-      this.boardDiv = wrap.querySelector(".pgn-guess-board");
-      this.statusEl = wrap.querySelector(".pgn-guess-status");
-      this.rightPane = wrap.querySelector(".pgn-guess-right");
+      this.boardDiv = cols.querySelector(".pgn-guess-board");
+      this.statusEl = cols.querySelector(".pgn-guess-status");
+      this.rightPane = cols.querySelector(".pgn-guess-right");
     }
 
     // ------------------------------------------------------------------------
-    // SAFE PGN PARSER (eval/clk stripped)
+    // PGN parsing (safe, eval/clk stripped)
     // ------------------------------------------------------------------------
 
     parsePGN() {
       const raw = C.normalizeFigurines(this.rawText);
       const chess = new Chess();
 
-      let ply = 0;
-      let i = 0;
+      let ply = 0, i = 0;
       let pending = [];
 
       const attach = (t) => {
@@ -152,7 +204,7 @@
         if (/^\d+\.{1,3}$/.test(tok)) continue;
 
         const san = normalizeSAN(tok);
-        if (!chess.move(san, { sloppy:true })) continue;
+        if (!chess.move(san, { sloppy: true })) continue;
 
         this.moves.push({
           isWhite: ply % 2 === 0,
@@ -188,13 +240,15 @@
       }, AUTOPLAY_DELAY);
     }
 
+    // ------------------------------------------------------------------------
+
     autoplayOpponentMoves() {
       while (this.index + 1 < this.moves.length) {
         const n = this.moves[this.index + 1];
         if (n.isWhite === this.userIsWhite) break;
 
         this.index++;
-        this.game.move(normalizeSAN(n.san), { sloppy:true });
+        this.game.move(normalizeSAN(n.san), { sloppy: true });
         this.currentFen = n.fen;
         this.board.position(n.fen, true);
         this.appendMove();
@@ -264,7 +318,7 @@
       if (!this.isGuessTurn()) return "snapback";
 
       const exp = this.moves[this.index + 1];
-      const legal = this.game.moves({ verbose:true });
+      const legal = this.game.moves({ verbose: true });
 
       const ok = legal.some(m => {
         if (m.from !== source || m.to !== target) return false;
@@ -330,13 +384,15 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+
   function init() {
     document.querySelectorAll("pgn-guess, pgn-guess-black")
       .forEach(el => new ReaderPGNView(el));
   }
 
   document.readyState === "loading"
-    ? document.addEventListener("DOMContentLoaded", init, { once:true })
+    ? document.addEventListener("DOMContentLoaded", init, { once: true })
     : init();
 
 })();
