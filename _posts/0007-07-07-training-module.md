@@ -22,7 +22,7 @@ Lorem ipsum dolor sit amet, 7. Nc4 Be7 8. Nce5 O-O 9. Be2 cxd4 10. Qxd4 Qxd4 con
 [Annotator "https://lichess.org/@/ralphptorres"]
 [Variant "Standard"]
 [ECO "B22"]
-[Opening "Sicilian Defense: Delayed Alapin Variation"]
+[Opening "Sicilian Defense, Alapin Variation"]
 [StudyName "Reykjavik 2024"]
 [ChapterName "Gramb, Marius - Deac, Bogdan-Daniel"]
 [ChapterURL "https://lichess.org/study/ksGyrMYK/yKkdXZke"]
