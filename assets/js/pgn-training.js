@@ -83,14 +83,16 @@
   }
 
   function sanitizeComment(text) {
-    const c = (text || "")
-      .replace(/\[%.*?]/g, "")
-      .replace(/\[D\]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+  const c = (text || "")
+    .replace(/\[%.*?]/g, "")     // engine tags
+    .replace(/\[D\]/g, "")       // [D]
+    .replace(/[{}]/g, "")        // 🔴 REMOVE ALL BRACES
+    .replace(/\s+/g, " ")
+    .trim();
 
-    return c || null;
-  }
+  return c || null;
+}
+
 
   function parseHeaders(text) {
     const headers = {};
