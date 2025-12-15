@@ -1,11 +1,5 @@
 // ============================================================================
-// pgn-training.js — stable + correct turn flag + richer comments/variations
-// Fixes requested:
-// 1) Show final variation text + "White resigns. 0-1" after last move
-// 2) Triangle buttons not black: color inherits / #333
-// 3) ◀ ▶ slightly smaller
-// 4) Header format: "First Last (Elo) – GM First Last (Elo)" + "Event, Opening"
-// 5) Header sits ABOVE the 2-column layout (outside flex row)
+// pgn-training.js — FINAL, CLEAN VARIATION TEXT (NO TRAILING ")")
 // ============================================================================
 
 (function () {
@@ -45,7 +39,6 @@
       .pgn-training-cols { display:flex; gap:1rem; align-items:flex-start; }
       .pgn-training-board { width:360px; max-width:100%; }
 
-      /* move list slightly shorter */
       .pgn-training-right {
         flex:1;
         max-height:360px;
@@ -65,7 +58,6 @@
         vertical-align:middle;
       }
 
-      /* ◀ ▶ slightly smaller + not black */
       .pgn-training-actions button {
         font-size:0.85em;
         line-height:1;
@@ -109,21 +101,19 @@
     return c || null;
   }
 
+  // ✅ FIXED: no trailing ")"
   function sanitizeVariationText(t) {
-    // Keep move numbers + SAN text, drop engine tags / nested comments, normalize spaces.
     let x = String(t || "");
     x = x.replace(/\[%.*?]/g, "");
     x = x.replace(/\[D\]/g, "");
-    x = x.replace(/\{[^}]*\}/g, ""); // remove braces blocks within variation
+    x = x.replace(/\{[^}]*\}/g, "");
     x = x.replace(/\s+/g, " ").trim();
+
     if (!x) return null;
+    if (x.startsWith("(")) x = x.slice(1);
+    if (x.endsWith(")")) x = x.slice(0, -1);
 
-    // User wants closing ")" but not necessarily opening "(":
-    // "(40. Kf1 ... Be6)" -> "40. Kf1 ... Be6)"
-    if (x.startsWith("(")) x = x.slice(1).trim();
-    if (!x.endsWith(")")) x = x + ")";
-
-    return x;
+    return x.trim() || null;
   }
 
   function stripHeaders(pgn) {
@@ -152,9 +142,7 @@
   }
 
   function captureVariation(raw, i) {
-    // raw[i] is '('; capture "( ... )" including parentheses
-    let j = i;
-    let d = 0;
+    let j = i, d = 0;
     while (j < raw.length) {
       if (raw[j] === "(") d++;
       else if (raw[j] === ")") {
@@ -173,10 +161,8 @@
 
   function swapCommaName(name) {
     const s = String(name || "").trim();
-    if (!s) return "";
-    const parts = s.split(",").map(x => x.trim());
-    if (parts.length === 2) return `${parts[1]} ${parts[0]}`.trim();
-    return s;
+    const p = s.split(",").map(x => x.trim());
+    return p.length === 2 ? `${p[1]} ${p[0]}` : s;
   }
 
   function formatPlayer(name, elo, title) {
@@ -208,18 +194,16 @@
       this.currentFen = "start";
 
       this.currentRow = null;
+
       this.build(src);
       this.initBoard();
       this.parsePGNAsync();
     }
 
-    // ----------------------------------------------------------------------
-
     build(src) {
       const wrap = document.createElement("div");
       wrap.className = "pgn-training-wrapper";
 
-      // (5) Header is OUTSIDE the 2-column flex container (placed before it)
       const header = this.buildHeader();
       if (header) wrap.appendChild(header);
 
@@ -260,15 +244,12 @@
     }
 
     buildHeader() {
-      const w = this.headers.White;
-      const b = this.headers.Black;
-      if (!w || !b) return null;
+      if (!this.headers.White || !this.headers.Black) return null;
 
-      // (4) New header format
-      const whiteLine = formatPlayer(w, this.headers.WhiteElo, this.headers.WhiteTitle);
-      const blackLine = formatPlayer(b, this.headers.BlackElo, this.headers.BlackTitle);
+      const line1 =
+        `${formatPlayer(this.headers.White, this.headers.WhiteElo, this.headers.WhiteTitle)} – ` +
+        `${formatPlayer(this.headers.Black, this.headers.BlackElo, this.headers.BlackTitle)}`;
 
-      const line1 = `${whiteLine} – ${blackLine}`.trim();
       const line2 = [this.headers.Event, this.headers.Opening].filter(Boolean).join(", ");
 
       const h = document.createElement("h3");
@@ -276,8 +257,6 @@
       h.innerHTML = line1 + (line2 ? `<br>${line2}` : "");
       return h;
     }
-
-    // ----------------------------------------------------------------------
 
     initBoard() {
       requestAnimationFrame(() => {
@@ -293,12 +272,9 @@
       });
     }
 
-    // ----------------------------------------------------------------------
-
     parsePGNAsync() {
       const rawAll = PGNCore.normalizeFigurines(this.rawText);
       const raw = stripHeaders(rawAll);
-
       this.result = resultFromRaw(rawAll);
 
       const chess = new Chess();
@@ -315,25 +291,19 @@
 
           const ch = raw[i];
 
-          // Comments { ... } attach to last parsed move
           if (ch === "{") {
             let j = i + 1;
             while (j < raw.length && raw[j] !== "}") j++;
             const c = sanitizeComment(raw.slice(i + 1, j));
-            if (c && this.moves.length) {
-              this.moves[this.moves.length - 1].comments.push(c);
-            }
+            if (c && this.moves.length) this.moves[this.moves.length - 1].comments.push(c);
             i = j + 1;
             continue;
           }
 
-          // Capture variation text as display-only annotation; skip its moves for parsing
           if (ch === "(") {
             const cap = captureVariation(raw, i);
             const v = sanitizeVariationText(cap.text);
-            if (v && this.moves.length) {
-              this.moves[this.moves.length - 1].variations.push(v);
-            }
+            if (v && this.moves.length) this.moves[this.moves.length - 1].variations.push(v);
             i = cap.next;
             continue;
           }
@@ -372,10 +342,6 @@
       requestAnimationFrame(step);
     }
 
-    // ----------------------------------------------------------------------
-    // Turn / training logic
-    // ----------------------------------------------------------------------
-
     updateTurn() {
       this.turnEl.textContent = this.game.turn() === "w" ? "⚐" : "⚑";
     }
@@ -390,7 +356,7 @@
         if (n.isWhite === this.userIsWhite) break;
 
         this.index++;
-        try { this.game.move(normalizeSAN(n.san), { sloppy: true }); } catch {}
+        this.game.move(normalizeSAN(n.san), { sloppy: true });
         this.currentFen = n.fen;
         this.board.position(n.fen, true);
         this.appendMove();
@@ -400,23 +366,17 @@
     }
 
     onUserDrop(source, target) {
-      if (!this.isGuessTurn()) return "snapback";
-      if (source === target) return "snapback";
+      if (!this.isGuessTurn() || source === target) return "snapback";
 
       const expected = this.moves[this.index + 1];
       if (!expected) return "snapback";
 
       const legal = this.game.moves({ verbose: true });
-
       const ok = legal.some(m => {
         if (m.from !== source || m.to !== target) return false;
-        try {
-          const g = new Chess(this.game.fen());
-          g.move(m);
-          return g.fen() === expected.fen;
-        } catch {
-          return false;
-        }
+        const g = new Chess(this.game.fen());
+        g.move(m);
+        return g.fen() === expected.fen;
       });
 
       this.feedbackEl.textContent = ok ? "✅" : "❌";
@@ -443,14 +403,12 @@
 
       this.index = next;
       this.game.reset();
-
       for (let i = 0; i <= this.index; i++) {
-        try { this.game.move(normalizeSAN(this.moves[i].san), { sloppy: true }); } catch {}
+        this.game.move(normalizeSAN(this.moves[i].san), { sloppy: true });
       }
 
       this.currentFen = this.index >= 0 ? this.moves[this.index].fen : "start";
       this.board.position(this.currentFen, false);
-
       this.updateTurn();
       this.updateButtons();
       this.feedbackEl.textContent = "";
@@ -461,10 +419,6 @@
       this.btnNext.disabled = this.index >= this.moves.length - 1;
     }
 
-    // ----------------------------------------------------------------------
-    // Right pane rendering (moves + comments + variation text + final result)
-    // ----------------------------------------------------------------------
-
     appendMove() {
       const m = this.moves[this.index];
       if (!m) return;
@@ -474,7 +428,6 @@
         row.className = "pgn-move-row";
         row.dataset.hasAnalysis = "false";
 
-        // add space after move number: "40. ♔g1?"
         row.innerHTML =
           `<span class="pgn-move-no">${m.moveNo}. </span>` +
           `<span class="pgn-move-white">${m.san}</span>`;
@@ -482,68 +435,37 @@
         this.rightPane.appendChild(row);
         this.currentRow = row;
 
-        // comments after this move
-        if (m.comments && m.comments.length) {
+        [...m.comments, ...m.variations].forEach(txt => {
+          if (/^White resigns\.$/i.test(txt)) return;
           row.dataset.hasAnalysis = "true";
-          m.comments.forEach(c => {
-            // keep "White resigns." for final line instead of inline
-            if (/^White resigns\.$/i.test(c.trim())) return;
-            const sp = document.createElement("span");
-            sp.className = "pgn-comment";
-            sp.textContent = " " + c;
-            row.appendChild(sp);
-          });
-        }
-
-        // variations after this move (display-only)
-        if (m.variations && m.variations.length) {
-          row.dataset.hasAnalysis = "true";
-          m.variations.forEach(v => {
-            const sp = document.createElement("span");
-            sp.className = "pgn-comment";
-            sp.textContent = " " + v;
-            row.appendChild(sp);
-          });
-        }
+          const sp = document.createElement("span");
+          sp.className = "pgn-comment";
+          sp.textContent = " " + txt;
+          row.appendChild(sp);
+        });
 
       } else if (this.currentRow) {
         const hasAnalysis = this.currentRow.dataset.hasAnalysis === "true";
 
         const b = document.createElement("span");
         b.className = "pgn-move-black";
-
-        // (2) If [White move] [analysis/variation] [Black mainline], prefix with "7... "
         b.textContent = hasAnalysis
           ? ` ${m.moveNo}... ${m.san}`
           : ` ${m.san}`;
 
         this.currentRow.appendChild(b);
 
-        // black move comments (except resign)
-        if (m.comments && m.comments.length) {
-          m.comments.forEach(c => {
-            if (/^White resigns\.$/i.test(c.trim())) return;
-            const sp = document.createElement("span");
-            sp.className = "pgn-comment";
-            sp.textContent = " " + c;
-            this.currentRow.appendChild(sp);
-          });
-        }
+        [...m.comments, ...m.variations].forEach(txt => {
+          if (/^White resigns\.$/i.test(txt)) return;
+          const sp = document.createElement("span");
+          sp.className = "pgn-comment";
+          sp.textContent = " " + txt;
+          this.currentRow.appendChild(sp);
+        });
 
-        // black move variations (rare, but handle)
-        if (m.variations && m.variations.length) {
-          m.variations.forEach(v => {
-            const sp = document.createElement("span");
-            sp.className = "pgn-comment";
-            sp.textContent = " " + v;
-            this.currentRow.appendChild(sp);
-          });
-        }
-
-        // (1) If this is the last move, append "White resigns. 0-1" as a separate line
         if (this.index === this.moves.length - 1) {
-          const resign = (m.comments || []).find(c => /^White resigns\.$/i.test(String(c).trim()));
-          const tail = [resign ? "White resigns." : "", this.result || ""].filter(Boolean).join(" ").trim();
+          const resign = m.comments.find(c => /^White resigns\.$/i.test(c));
+          const tail = [resign ? "White resigns." : "", this.result].filter(Boolean).join(" ");
           if (tail) {
             const line = document.createElement("div");
             line.className = "pgn-result-line";
