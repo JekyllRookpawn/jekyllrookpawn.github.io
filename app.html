@@ -3,14 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PGN App</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+<title>PGN Viewer</title>
+
+<link rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 </head>
 
-<body>
-<div class="app" data-theme="dark">
+<body data-theme="dark">
+
+<div class="app">
 
 <header class="topbar">
   <div class="brand">
@@ -31,7 +35,7 @@
 
 <main class="grid">
   <section class="panel board-panel">
-    <div id="board" class="board"></div>
+    <div id="board"></div>
 
     <div class="controls">
       <button id="btnFirst">⏮</button>
@@ -52,7 +56,7 @@
   </section>
 </main>
 
-<!-- PGN lives here -->
+<!-- PGN DATA -->
 <pgn-data>
 [Event "Demo Game"]
 [Site "Istanbul"]
@@ -74,7 +78,11 @@
 (() => {
   "use strict";
 
-  const pgnText = document.querySelector("pgn-data").textContent.trim();
+  /* custom element definition (required) */
+  customElements.define("pgn-data", class extends HTMLElement {});
+
+  const pgnText =
+    document.querySelector("pgn-data").textContent.trim();
 
   const chess = new Chess();
   chess.load_pgn(pgnText, { sloppy: true });
@@ -84,7 +92,8 @@
 
   const board = Chessboard("board", {
     position: "start",
-    pieceTheme: "chessboardjs/img/chesspieces/wikipedia/{piece}.png",
+    pieceTheme:
+      "https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/img/chesspieces/wikipedia/{piece}.png",
     moveSpeed: 200,
     snapSpeed: 30
   });
@@ -100,7 +109,7 @@
   let autoplay = null;
   let orientation = "white";
 
-  // render move list
+  /* render moves */
   moves.forEach((m, i) => {
     const span = document.createElement("span");
     span.className = "move";
@@ -110,33 +119,45 @@
     movesDiv.appendChild(span);
   });
 
+  function highlight(i) {
+    document.querySelectorAll(".move")
+      .forEach((m, k) => m.classList.toggle("active", k === i));
+  }
+
   function goto(i) {
     chess.reset();
     for (let j = 0; j <= i; j++) chess.move(moves[j]);
     board.position(chess.fen(), true);
     index = i;
-
-    document.querySelectorAll(".move").forEach((m, k) =>
-      m.classList.toggle("active", k === i)
-    );
+    highlight(i);
   }
 
   function next() {
-    if (index < moves.length - 1) goto(index + 1);
-  }
-
-  function prev() {
-    if (index >= 0) goto(index - 1);
-    else {
-      chess.reset();
-      board.position("start", true);
+    if (index < moves.length - 1) {
+      goto(index + 1);
+    } else if (autoplay) {
+      clearInterval(autoplay);
+      autoplay = null;
+      btnPlay.textContent = "▶";
     }
   }
 
-  // buttons
+  function prev() {
+    if (index > 0) goto(index - 1);
+    else resetBoard();
+  }
+
+  function resetBoard() {
+    chess.reset();
+    board.position("start", true);
+    index = -1;
+    highlight(-1);
+  }
+
+  /* controls */
   btnNext.onclick = next;
   btnPrev.onclick = prev;
-  btnFirst.onclick = () => goto(-1);
+  btnFirst.onclick = resetBoard;
   btnLast.onclick = () => goto(moves.length - 1);
 
   btnPlay.onclick = () => {
@@ -170,7 +191,9 @@
     if (e.key === "ArrowRight") next();
     if (e.key === "ArrowLeft") prev();
   });
+
 })();
 </script>
+
 </body>
 </html>
