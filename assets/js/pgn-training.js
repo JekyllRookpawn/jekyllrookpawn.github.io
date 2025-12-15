@@ -24,59 +24,6 @@
   }
 
   // --------------------------------------------------------------------------
-  // Styles
-  // --------------------------------------------------------------------------
-
-  function ensureStyles() {
-    if (document.getElementById("pgn-training-style")) return;
-
-    const s = document.createElement("style");
-    s.id = "pgn-training-style";
-    s.textContent = `
-      .pgn-training-wrapper { margin-bottom:1.5rem; }
-      .pgn-training-header { margin:0 0 .6rem 0; font-weight:600; }
-
-      .pgn-training-cols { display:flex; gap:1rem; align-items:flex-start; }
-      .pgn-training-board { width:360px; max-width:100%; }
-
-      .pgn-training-right {
-        flex:1;
-        max-height:360px;
-        overflow-y:auto;
-      }
-
-      .pgn-move-row { font-weight:700; margin-top:.5em; }
-      .pgn-move-no { margin-right:.25em; }
-      .pgn-move-white { margin-right:.5em; }
-      .pgn-move-black { margin-left:.3em; }
-      .pgn-comment { font-weight:400; }
-      .pgn-result-line { margin-top:.6em; font-weight:400; }
-
-      .pgn-training-status span {
-        margin-right:.35em;
-        font-size:1.1em;
-        vertical-align:middle;
-      }
-
-      .pgn-training-actions button {
-        font-size:0.85em;
-        line-height:1;
-        padding:0 .12em;
-        margin-right:.15em;
-        cursor:pointer;
-        background:none;
-        border:none;
-        color:#333;
-      }
-      .pgn-training-actions button:disabled {
-        opacity:.35;
-        cursor:default;
-      }
-    `;
-    document.head.appendChild(s);
-  }
-
-  // --------------------------------------------------------------------------
   // Helpers
   // --------------------------------------------------------------------------
 
@@ -164,8 +111,6 @@
 
   class TrainingView {
     constructor(src) {
-      ensureStyles();
-
       this.rawText = (src.textContent || "").trim();
       this.headers = extractHeaders(this.rawText);
 
@@ -189,7 +134,6 @@
     // -------------------- STATUS CONTROLLER --------------------
 
     setStatus(type) {
-      // clear all
       this.feedbackEl.textContent = "";
       this.solvedEl.hidden = true;
 
