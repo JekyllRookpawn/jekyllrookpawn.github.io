@@ -48,18 +48,22 @@ body{
   font-size:14px;
 }
 
-/* contextual menu */
-#moveMenu{
+/* unified tooltip */
+#tooltip{
   position:absolute;
   display:none;
   background:#141820;
   border:1px solid #2a3150;
   border-radius:10px;
-  padding:6px;
-  gap:6px;
+  padding:8px;
   z-index:1000;
+  min-width:120px;
 }
-#moveMenu button{
+#tooltip .row{
+  display:flex;
+  gap:6px;
+}
+#tooltip button{
   background:#1f2430;
   border:none;
   border-radius:8px;
@@ -68,7 +72,19 @@ body{
   color:#ddd;
   cursor:pointer;
 }
-#moveMenu button:hover{background:#2a3150}
+#tooltip button:hover{background:#2a3150}
+
+#tooltip textarea{
+  width:180px;
+  min-height:60px;
+  background:#0f1115;
+  color:#e6e6e6;
+  border:1px solid #2a3150;
+  border-radius:8px;
+  padding:6px;
+  font-size:14px;
+  resize:none;
+}
 </style>
 </head>
 
@@ -79,11 +95,7 @@ body{
   <div class="moves" id="moves"></div>
 </div>
 
-<div id="moveMenu">
-  <button id="menuPromote">⬆</button>
-  <button id="menuComment">➕</button>
-  <button id="menuDelete">🗑</button>
-</div>
+<div id="tooltip"></div>
 
 <script>
 (() => {
@@ -110,7 +122,12 @@ let cursor=root;
 let activeNode=null;
 
 const chess=new Chess();
-const board=Chessboard("board",{position:"start",draggable:true,onDrop});
+const board=Chessboard("board",{
+  position:"start",
+  draggable:true,
+  pieceTheme:"https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+  onDrop
+});
 
 function rebuildTo(n){
   chess.reset();
@@ -121,10 +138,25 @@ function rebuildTo(n){
 }
 
 const movesDiv=document.getElementById("moves");
-const menu=document.getElementById("moveMenu");
-const btnPromote=document.getElementById("menuPromote");
-const btnDelete=document.getElementById("menuDelete");
-const btnComment=document.getElementById("menuComment");
+const tooltip=document.getElementById("tooltip");
+
+function hideTooltip(){ tooltip.style.display="none"; tooltip.innerHTML=""; }
+
+document.body.addEventListener("click",hideTooltip);
+
+function showTooltip(x,y,content){
+  tooltip.innerHTML="";
+  tooltip.appendChild(content);
+  tooltip.style.left=x+"px";
+  tooltip.style.top=y+"px";
+  tooltip.style.display="block";
+}
+
+/* ---------- rendering ---------- */
+
+function clearActive(){
+  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
+}
 
 function renderLine(start,container,ply){
   let n=start.next;
@@ -134,11 +166,12 @@ function renderLine(start,container,ply){
     span.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:"")+figSAN(n.san)+" ";
     span.onclick=(e)=>{
       e.stopPropagation();
-      document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
+      clearActive();
       span.classList.add("active");
       activeNode=n;
+      cursor=n;
       rebuildTo(n);
-      showMenu(e.pageX,e.pageY,n);
+      showMoveMenu(e.pageX,e.pageY,n);
     };
     container.appendChild(span);
 
@@ -167,9 +200,12 @@ function renderVariation(vRoot,container,ply){
   span.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:`${Math.floor(ply/2)+1}... `)+figSAN(vRoot.san)+" ";
   span.onclick=(e)=>{
     e.stopPropagation();
+    clearActive();
+    span.classList.add("active");
     activeNode=vRoot;
+    cursor=vRoot;
     rebuildTo(vRoot);
-    showMenu(e.pageX,e.pageY,vRoot);
+    showMoveMenu(e.pageX,e.pageY,vRoot);
   };
   container.appendChild(span);
 
@@ -188,65 +224,125 @@ function renderAll(){
   renderLine(root,movesDiv,0);
 }
 
-function showMenu(x,y,node){
-  menu.style.left=x+"px";
-  menu.style.top=y+"px";
-  menu.style.display="flex";
+/* ---------- tooltip menus ---------- */
 
-  btnPromote.style.display =
-    node.parent && node.parent.variations.includes(node) ? "inline-flex" : "none";
+function showMoveMenu(x,y,node){
+  const box=document.createElement("div");
+  box.className="row";
+
+  if(node.parent && node.parent.variations.includes(node)){
+    const up=document.createElement("button");
+    up.textContent="⬆";
+    up.onclick=(e)=>{e.stopPropagation();promote(node);hideTooltip();};
+    box.appendChild(up);
+  }
+
+  const plus=document.createElement("button");
+  plus.textContent="➕";
+  plus.onclick=(e)=>{e.stopPropagation();showCommentEditor(x,y,node);};
+  box.appendChild(plus);
+
+  const del=document.createElement("button");
+  del.textContent="🗑";
+  del.onclick=(e)=>{e.stopPropagation();deleteNode(node);hideTooltip();};
+  box.appendChild(del);
+
+  showTooltip(x,y,box);
 }
 
-document.body.onclick=()=>menu.style.display="none";
+function showCommentEditor(x,y,node){
+  const box=document.createElement("div");
+  const ta=document.createElement("textarea");
+  ta.value=node.comment||"";
+  box.appendChild(ta);
 
-btnDelete.onclick=()=>{
-  if(!activeNode||activeNode===root)return;
-  const p=activeNode.parent;
-  if(p.next===activeNode)p.next=null;
-  p.variations=p.variations.filter(v=>v!==activeNode);
-  activeNode=null;
-  menu.style.display="none";
+  const row=document.createElement("div");
+  row.className="row";
+
+  const save=document.createElement("button");
+  save.textContent="Save";
+  save.onclick=(e)=>{
+    e.stopPropagation();
+    node.comment=ta.value.replace(/\}/g,"").trim();
+    hideTooltip();
+    renderAll();
+  };
+
+  const cancel=document.createElement("button");
+  cancel.textContent="Cancel";
+  cancel.onclick=(e)=>{e.stopPropagation();hideTooltip();};
+
+  row.appendChild(save);
+  row.appendChild(cancel);
+  box.appendChild(row);
+
+  showTooltip(x,y,box);
+}
+
+/* ---------- structure ops ---------- */
+
+function deleteNode(n){
+  if(!n||n===root)return;
+  const p=n.parent;
+  if(p.next===n)p.next=null;
+  p.variations=p.variations.filter(v=>v!==n);
+  cursor=p;
   rebuildTo(p);
   renderAll();
-};
+}
 
-btnComment.onclick=()=>{
-  if(!activeNode)return;
-  const txt=prompt("Comment:",activeNode.comment||"");
-  if(txt!==null)activeNode.comment=txt.replace(/\}/g,"").trim();
-  menu.style.display="none";
-  renderAll();
-};
-
-btnPromote.onclick=()=>{
-  const p=activeNode.parent;
-  p.variations=p.variations.filter(v=>v!==activeNode);
+function promote(n){
+  const p=n.parent;
+  const idx=p.variations.indexOf(n);
+  if(idx<0)return;
+  p.variations.splice(idx,1);
   const old=p.next;
   if(old)p.variations.unshift(old);
-  p.next=activeNode;
-  activeNode.parent=p;
-  menu.style.display="none";
+  p.next=n;
+  n.parent=p;
   renderAll();
-};
+}
 
-async function onDrop(from,to){
-  let promotion="q";
-  if(chess.get(from).type==="p"&&(to[1]==="8"||to[1]==="1")){
-    promotion=prompt("Promote to (q,r,b,n):","q")||"q";
-  }
-  const m=chess.move({from,to,promotion});
-  if(!m)return"snapback";
+/* ---------- underpromotion ---------- */
 
-  let next;
-  if(cursor.next&&cursor.next.san===m.san)next=cursor.next;
-  else{
-    next=new Node(m.san,cursor);
-    if(!cursor.next)cursor.next=next;
-    else cursor.variations.push(next);
+function showPromotionUI(x,y,cb){
+  const row=document.createElement("div");
+  row.className="row";
+  ["q","r","b","n"].forEach(p=>{
+    const b=document.createElement("button");
+    b.textContent=FIG[p.toUpperCase()];
+    b.onclick=(e)=>{e.stopPropagation();hideTooltip();cb(p);};
+    row.appendChild(b);
+  });
+  showTooltip(x,y,row);
+}
+
+/* ---------- move entry ---------- */
+
+function onDrop(from,to){
+  const piece=chess.get(from);
+  const doMove=(promotion)=>{
+    const m=chess.move({from,to,promotion});
+    if(!m)return"snapback";
+
+    let next;
+    if(cursor.next&&cursor.next.san===m.san)next=cursor.next;
+    else{
+      next=new Node(m.san,cursor);
+      if(!cursor.next)cursor.next=next;
+      else cursor.variations.push(next);
+    }
+    cursor=next;
+    board.position(chess.fen(),false);
+    renderAll();
+  };
+
+  if(piece&&piece.type==="p"&&(to[1]==="8"||to[1]==="1")){
+    const rect=document.getElementById("board").getBoundingClientRect();
+    showPromotionUI(rect.left+rect.width/2,rect.top+rect.height/2,doMove);
+    return;
   }
-  cursor=next;
-  board.position(chess.fen(),false);
-  renderAll();
+  doMove("q");
 }
 
 renderAll();
