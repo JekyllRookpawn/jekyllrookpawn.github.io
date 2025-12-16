@@ -6,7 +6,7 @@
 
 <title>JekyllChess PGN App</title>
 
-<!-- jQuery (REQUIRED by chessboard.js) -->
+<!-- jQuery REQUIRED by chessboard.js -->
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 
 <!-- Chess libraries -->
@@ -35,6 +35,7 @@ body{
 .top .title{font-weight:700}
 .wrap{display:flex;flex-direction:column;gap:10px;padding:12px}
 #board{width:min(92vw,560px);margin:0 auto}
+
 .controls{
   width:min(92vw,560px);
   margin:0 auto;
@@ -51,6 +52,7 @@ body{
   cursor:pointer;
 }
 .controls button:disabled{opacity:.4}
+
 .panels{
   width:min(92vw,900px);
   margin:0 auto;
@@ -59,6 +61,7 @@ body{
   gap:10px;
 }
 @media(min-width:900px){.panels{grid-template-columns:1fr 1fr}}
+
 .card{
   border:1px solid #222;
   border-radius:12px;
@@ -71,6 +74,7 @@ body{
   font-weight:600;
 }
 .card .body{padding:12px}
+
 .moves{font-size:18px;line-height:2.1}
 .move{
   display:inline-block;
@@ -79,17 +83,20 @@ body{
   cursor:pointer;
 }
 .move.active{background:#3a7afe;color:#fff}
+
 .iconBtn{
   width:26px;height:26px;
   border:none;border-radius:999px;
   background:#1f2430;color:#ddd;
   cursor:pointer;margin-left:4px;
 }
+
 .variation{
   margin:6px 0 10px 26px;
   padding-left:10px;
   border-left:2px dashed #444;
 }
+
 .commentRow{
   margin:4px 0 10px 18px;
   padding:6px 8px;
@@ -97,31 +104,7 @@ body{
   background:#121724;
   font-size:14px;
 }
-.inlineEditor{
-  margin:6px 0 10px 18px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.inlineEditor textarea{
-  width:100%;
-  min-height:70px;
-  border-radius:10px;
-  border:1px solid #222;
-  background:#0f1115;
-  color:#e6e6e6;
-  padding:10px;
-}
-.inlineEditor .row{display:flex;gap:8px}
-.inlineEditor button{
-  flex:1;
-  padding:8px 0;
-  border:none;
-  border-radius:10px;
-  background:#1f2430;
-  color:#ddd;
-  cursor:pointer;
-}
+
 .pgnBox{
   width:100%;
   height:320px;
@@ -132,6 +115,7 @@ body{
   padding:12px;
   font-family:ui-monospace,monospace;
 }
+
 .pgnActions{display:flex;gap:8px;margin-top:10px}
 .pgnActions button{
   flex:1;
@@ -143,7 +127,7 @@ body{
   cursor:pointer;
 }
 
-/* Underpromotion modal */
+/* Underpromotion */
 #promoOverlay{
   position:fixed;
   inset:0;
@@ -205,9 +189,7 @@ body{
   </div>
 </div>
 
-<div id="promoOverlay">
-  <div id="promoBox"></div>
-</div>
+<div id="promoOverlay"><div id="promoBox"></div></div>
 
 <script>
 (() => {
@@ -216,6 +198,7 @@ const figSAN=s=>s.replace(/^[KQRBN]/,p=>FIG[p]||p).replace(/=([QRBN])/g,(_,p)=>"
 
 let NODE_SEQ=1;
 const byId=new Map();
+
 class Node{
   constructor(san,parent){
     this.id="n"+NODE_SEQ++;
@@ -227,6 +210,7 @@ class Node{
     byId.set(this.id,this);
   }
 }
+
 const root=new Node(null,null);
 let cursor=root;
 let navNode=null;
@@ -240,13 +224,15 @@ const board=Chessboard("board",{
   onDrop
 });
 
-function rebuildChessToNode(n){
+/* ---------- helpers ---------- */
+
+function rebuildChessToNode(n,animate=true){
   chess.reset();
   const chain=[];
   while(n&&n!==root){chain.push(n);n=n.parent}
   chain.reverse().forEach(m=>chess.move(m.san));
   currentFEN=chess.fen();
-  board.position(currentFEN,true);
+  board.position(currentFEN,animate);
 }
 
 function isOnMainline(n){
@@ -255,31 +241,36 @@ function isOnMainline(n){
   return false;
 }
 
-function deleteNode(node){
-  if(!node||node===root)return;
-  const p=node.parent;
-  if(p.next===node)p.next=null;
-  p.variations=p.variations.filter(v=>v!==node);
-  cursor=p;
-  rebuildChessToNode(p);
-  renderAll();
-  syncPGN();
+function mainlineNodes(){
+  const a=[];
+  let n=root.next;
+  while(n){a.push(n);n=n.next}
+  return a;
 }
+
+function highlight(id){
+  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
+  if(!id)return;
+  const el=document.querySelector(`.move[data-node-id="${id}"]`);
+  if(el)el.classList.add("active");
+}
+
+/* ---------- rendering ---------- */
 
 const movesDiv=document.getElementById("moves");
 const pgnText=document.getElementById("pgnText");
 
 function renderLine(start,container,ply){
   let n=start.next;
-  let prev=start;
   while(n){
     const s=document.createElement("span");
     s.className="move";
+    s.dataset.nodeId=n.id;
     s.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:"")+figSAN(n.san)+" ";
     s.onclick=()=>{
       if(isOnMainline(n))navNode=n;
       cursor=n;
-      rebuildChessToNode(n);
+      rebuildChessToNode(n,true);
       highlight(n.id);
     };
     container.appendChild(s);
@@ -300,30 +291,21 @@ function renderLine(start,container,ply){
     n.variations.forEach(v=>{
       const vd=document.createElement("div");
       vd.className="variation";
-      const vs=document.createElement("span");
-      vs.className="move";
-      vs.textContent=figSAN(v.san)+" ";
-      vs.onclick=()=>{cursor=v;rebuildChessToNode(v);highlight(v.id)};
-      vd.appendChild(vs);
       renderLine(v,vd,ply+1);
       container.appendChild(vd);
     });
 
-    prev=n;
     n=n.next;
     ply++;
   }
-}
-
-function highlight(id){
-  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
-  const el=[...document.querySelectorAll(".move")].find(m=>m.textContent.includes(id));
 }
 
 function renderAll(){
   movesDiv.innerHTML="";
   renderLine(root,movesDiv,0);
 }
+
+/* ---------- PGN ---------- */
 
 function serialize(node,ply){
   let out=[],n=node.next;
@@ -338,10 +320,26 @@ function serialize(node,ply){
 }
 
 function syncPGN(){
-  pgnText.value=serialize(root,0)+" *";
+  pgnText.value=(serialize(root,0)+" *").trim();
 }
 
-function showPromotion(from,to){
+/* ---------- deletion ---------- */
+
+function deleteNode(n){
+  if(!n||n===root)return;
+  const p=n.parent;
+  if(p.next===n)p.next=null;
+  p.variations=p.variations.filter(v=>v!==n);
+  cursor=p;
+  navNode=isOnMainline(p)?p:null;
+  rebuildChessToNode(p,true);
+  renderAll();
+  syncPGN();
+}
+
+/* ---------- underpromotion ---------- */
+
+function showPromotion(){
   return new Promise(res=>{
     const box=document.getElementById("promoBox");
     box.innerHTML="";
@@ -358,29 +356,103 @@ function hidePromo(){
   document.getElementById("promoOverlay").style.display="none";
 }
 
+/* ---------- move entry ---------- */
+
 async function onDrop(from,to){
   let promotion="q";
   if(chess.get(from).type==="p"&&(to[1]==="8"||to[1]==="1")){
-    promotion=await showPromotion(from,to);
+    promotion=await showPromotion();
   }
   const m=chess.move({from,to,promotion});
   if(!m)return"snapback";
 
-  const node=new Node(m.san,cursor);
-  if(!cursor.next)cursor.next=node;
-  else cursor.variations.push(node);
-  cursor=node;
+  let next;
+  if(cursor.next&&cursor.next.san===m.san) next=cursor.next;
+  else{
+    next=new Node(m.san,cursor);
+    if(!cursor.next)cursor.next=next;
+    else cursor.variations.push(next);
+  }
+  cursor=next;
+  if(isOnMainline(cursor))navNode=cursor;
   currentFEN=chess.fen();
   board.position(currentFEN,false);
   renderAll();
   syncPGN();
+  highlight(cursor.id);
 }
 
-document.getElementById("copyPGN").onclick=()=>navigator.clipboard.writeText(pgnText.value);
-document.getElementById("copyFEN").onclick=()=>navigator.clipboard.writeText(currentFEN);
+/* ---------- navigation ---------- */
+
+function updateNavButtons(){
+  const has=mainlineNodes().length>0;
+  [btnStart,btnPrev,btnNext,btnEnd].forEach(b=>b.disabled=!has);
+}
+
+function goStart(){
+  navNode=null;
+  cursor=root;
+  rebuildChessToNode(root,true);
+  highlight("");
+}
+
+function goEnd(){
+  const a=mainlineNodes();
+  if(!a.length)return goStart();
+  navNode=a[a.length-1];
+  cursor=navNode;
+  rebuildChessToNode(navNode,true);
+  highlight(navNode.id);
+}
+
+function goPrev(){
+  const a=mainlineNodes();
+  if(!navNode||!a.length)return;
+  const i=a.findIndex(x=>x.id===navNode.id);
+  if(i<=0)return goStart();
+  navNode=a[i-1];
+  cursor=navNode;
+  rebuildChessToNode(navNode,true);
+  highlight(navNode.id);
+}
+
+function goNext(){
+  const a=mainlineNodes();
+  if(!a.length)return;
+  if(!navNode)navNode=a[0];
+  else{
+    const i=a.findIndex(x=>x.id===navNode.id);
+    navNode=a[Math.min(a.length-1,i+1)];
+  }
+  cursor=navNode;
+  rebuildChessToNode(navNode,true);
+  highlight(navNode.id);
+}
+
+btnStart.onclick=goStart;
+btnPrev.onclick=goPrev;
+btnNext.onclick=goNext;
+btnEnd.onclick=goEnd;
+
+document.addEventListener("keydown",e=>{
+  const t=document.activeElement;
+  if(t&&t.tagName==="TEXTAREA")return;
+  if(e.key==="Home"){e.preventDefault();goStart();}
+  if(e.key==="End"){e.preventDefault();goEnd();}
+  if(e.key==="ArrowLeft"){e.preventDefault();goPrev();}
+  if(e.key==="ArrowRight"){e.preventDefault();goNext();}
+});
+
+/* ---------- copy ---------- */
+
+copyPGN.onclick=()=>navigator.clipboard.writeText(pgnText.value);
+copyFEN.onclick=()=>navigator.clipboard.writeText(currentFEN);
+
+/* ---------- init ---------- */
 
 renderAll();
 syncPGN();
+updateNavButtons();
 })();
 </script>
 
