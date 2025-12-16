@@ -28,7 +28,6 @@ pgn: |
 
 <title>{{ page.title }}</title>
 
-<!-- Libraries -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
@@ -36,21 +35,14 @@ pgn: |
   href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
 
 <style>
-/* ---------- RESET ---------- */
 * { box-sizing: border-box; }
+
 html, body {
   margin: 0;
   height: 100%;
   background: #0f1115;
   color: #e6e6e6;
   font-family: system-ui, -apple-system, sans-serif;
-}
-
-/* ---------- APP ---------- */
-.app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
 }
 
 /* ---------- TOP BAR ---------- */
@@ -68,32 +60,31 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
 }
 
 .brand img {
   width: 22px;
   height: 22px;
-  display: block;
+  filter: invert(1); /* reversed colors */
 }
 
 .title {
   font-weight: 700;
-  letter-spacing: .2px;
-  white-space: nowrap;
 }
 
 #gameLine {
-  opacity: .85;
+  margin-left: auto;
   font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  opacity: .85;
 }
 
-.spacer { flex: 1; }
+/* ---------- LAYOUT ---------- */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-/* ---------- MAIN (MOBILE FIRST) ---------- */
 .main {
   flex: 1;
   display: flex;
@@ -106,13 +97,13 @@ html, body {
 }
 
 #board {
-  width: min(92vw, 560px); /* bigger board */
+  width: min(92vw, 560px);
   margin: 0 auto;
 }
 
 /* ---------- CONTROLS ---------- */
 .controls {
-  padding: 0 12px 12px 12px;
+  padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -137,23 +128,18 @@ html, body {
   background: #2a3150;
 }
 
-/* Flip button under the second row */
-#btnFlip {
-  width: 100%;
-}
-
 /* ---------- MOVES ---------- */
 .moves {
-  padding: 12px;
+  padding: 16px;
   overflow-y: auto;
-  line-height: 1.9;
-  font-size: 15px;
+  line-height: 2.2;
+  font-size: 18px;      /* significantly larger */
   border-top: 1px solid #222;
 }
 
 .move {
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 6px;
   display: inline-block;
 }
@@ -174,12 +160,12 @@ html, body {
 
 .comment {
   display: none;
-  margin: 4px 0 8px 16px;
-  padding: 6px 8px;
+  margin: 6px 0 10px 18px;
+  padding: 8px 10px;
   background: #1c2230;
   border-left: 3px solid #3a7afe;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 15px;
   color: #cfd6ff;
 }
 
@@ -187,8 +173,7 @@ html, body {
 @media (min-width: 900px) {
   .main {
     display: grid;
-    grid-template-columns: 560px 1fr; /* match bigger board */
-    align-items: start;
+    grid-template-columns: 560px 1fr;
   }
   .moves {
     border-top: none;
@@ -205,10 +190,9 @@ html, body {
 
   <div class="topbar">
     <div class="brand">
-      <img src="https://jekyllchess.github.io/assets/favicon.png" alt="JekyllChess">
+      <img src="https://jekyllchess.github.io/assets/favicon.png" alt="">
       <div class="title">JekyllChess PGN App</div>
     </div>
-    <div class="spacer"></div>
     <div id="gameLine"></div>
   </div>
 
@@ -220,15 +204,14 @@ html, body {
 
       <div class="controls">
         <div class="controls-row">
-          <button id="btnFirst" aria-label="First">⏮</button>
-          <button id="btnPrev" aria-label="Previous">◀</button>
-          <button id="btnPlay" aria-label="Play/Pause">▶</button>
-          <button id="btnNext" aria-label="Next">▶</button>
-          <button id="btnLast" aria-label="Last">⏭</button>
+          <button id="btnFirst">⏮</button>
+          <button id="btnPrev">◀</button>
+          <button id="btnPlay">▶</button>
+          <button id="btnNext">▶</button>
+          <button id="btnLast">⏭</button>
         </div>
-
         <div class="controls-row">
-          <button id="btnFlip" aria-label="Flip board">↺ Flip board</button>
+          <button id="btnFlip">↺ Flip board</button>
         </div>
       </div>
     </div>
@@ -237,102 +220,43 @@ html, body {
   </div>
 </div>
 
-<!-- PGN FROM FRONT-MATTER -->
 <script id="pgn-data" type="application/json">
 {{ page.pgn | jsonify }}
 </script>
 
 <script>
 (() => {
-  const pgn = JSON.parse(document.getElementById("pgn-data").textContent);
-
-  const chess = new Chess();
-  chess.load_pgn(pgn, { sloppy: true });
-
-  const moves = chess.history({ verbose: true });
-  chess.reset();
-
-  const board = Chessboard("board", {
-    position: "start",
-    pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png"
-  });
-
-  // Elements
-  const movesDiv = document.getElementById("moves");
-  const gameLine = document.getElementById("gameLine");
-
-  const btnFirst = document.getElementById("btnFirst");
-  const btnPrev  = document.getElementById("btnPrev");
-  const btnPlay  = document.getElementById("btnPlay");
-  const btnNext  = document.getElementById("btnNext");
-  const btnLast  = document.getElementById("btnLast");
-  const btnFlip  = document.getElementById("btnFlip");
-
-  // Header line (players)
-  const h = chess.header();
-  gameLine.textContent = `${h.White || ""} – ${h.Black || ""}`.trim();
-
-  // Figurine SAN (very small, robust conversion)
   const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
-  function sanToFigurine(san) {
-    if (!san) return san;
 
-    // Split trailing NAGs like "?!", "!!", "?!", etc.
-    const nagMatch = san.match(/[!?]+$/);
-    const nag = nagMatch ? nagMatch[0] : "";
-    let core = nag ? san.slice(0, -nag.length) : san;
-
-    // Replace leading piece letter with figurine
-    core = core.replace(/^[KQRBN]/, ch => FIG[ch] || ch);
-
-    // Replace promotion piece (e.g. e8=Q+)
-    core = core.replace(/=([QRBN])/g, (_, p) => "=" + (FIG[p] || p));
-
+  function sanToFig(san) {
+    const nag = san.match(/[!?]+$/)?.[0] || "";
+    let core = san.replace(/[!?]+$/, "");
+    core = core.replace(/^[KQRBN]/, p => FIG[p]);
+    core = core.replace(/=([QRBN])/g, (_,p)=>"="+FIG[p]);
     return { core, nag };
   }
 
+  const chess = new Chess();
+  chess.load_pgn(JSON.parse(pgnData.textContent), { sloppy: true });
+  const initialMoves = chess.history({ verbose: true });
+  chess.reset();
+
+  const movesDiv = document.getElementById("moves");
+
+  let moves = [];
   let index = -1;
-  let autoplay = null;
-  let orientation = "white";
 
-  // Render moves
-  moves.forEach((m, i) => {
-    const moveSpan = document.createElement("span");
-    moveSpan.className = "move";
+  function renderMove(m, i) {
+    const span = document.createElement("span");
+    span.className = "move";
 
-    const { core, nag } = sanToFigurine(m.san);
-    const moveNo = (m.color === "w") ? `${Math.floor(i / 2) + 1}. ` : "";
-    const nagHtml = nag ? `<span class="nag">${nag}</span>` : "";
+    const { core, nag } = sanToFig(m.san);
+    const num = m.color === "w" ? `${Math.floor(i/2)+1}. ` : "";
 
-    moveSpan.innerHTML = `${moveNo}${core}${nagHtml} `;
-    movesDiv.appendChild(moveSpan);
+    span.innerHTML = `${num}${core}${nag ? `<span class="nag">${nag}</span>` : ""} `;
+    span.onclick = () => goto(i);
 
-    let commentDiv = null;
-    if (m.comment) {
-      commentDiv = document.createElement("div");
-      commentDiv.className = "comment";
-      commentDiv.textContent = m.comment;
-      movesDiv.appendChild(commentDiv);
-    }
-
-    moveSpan.onclick = () => {
-      goto(i);
-      if (commentDiv) {
-        commentDiv.style.display = (commentDiv.style.display === "block") ? "none" : "block";
-      }
-    };
-  });
-
-  function highlight(i) {
-    document.querySelectorAll(".move")
-      .forEach((m, k) => m.classList.toggle("active", k === i));
-  }
-
-  function resetBoard() {
-    chess.reset();
-    board.position("start", true);
-    index = -1;
-    highlight(-1);
+    movesDiv.appendChild(span);
   }
 
   function goto(i) {
@@ -340,38 +264,32 @@ html, body {
     for (let j = 0; j <= i; j++) chess.move(moves[j]);
     board.position(chess.fen(), true);
     index = i;
-    highlight(i);
+    document.querySelectorAll(".move")
+      .forEach((m,k)=>m.classList.toggle("active",k===i));
   }
 
-  function stop() {
-    clearInterval(autoplay);
-    autoplay = null;
-    btnPlay.textContent = "▶";
-  }
+  initialMoves.forEach(m => {
+    moves.push(m);
+    renderMove(m, moves.length - 1);
+  });
 
-  function next() {
-    if (index < moves.length - 1) goto(index + 1);
-    else stop();
-  }
+  const board = Chessboard("board", {
+    position: "start",
+    draggable: true,
+    pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+    onDrop: (src, dst) => {
+      const move = chess.move({ from: src, to: dst, promotion: "q" });
+      if (!move) return "snapback";
 
-  // Controls
-  btnFirst.onclick = resetBoard;
-  btnPrev.onclick = () => (index > 0 ? goto(index - 1) : resetBoard());
-  btnNext.onclick = next;
-  btnLast.onclick = () => goto(moves.length - 1);
+      moves.push(move);
+      renderMove(move, moves.length - 1);
+      goto(moves.length - 1);
+    }
+  });
 
-  btnPlay.onclick = () => {
-    if (autoplay) return stop();
-    btnPlay.textContent = "⏸";
-    autoplay = setInterval(next, 500);
-  };
+  document.getElementById("btnFlip").onclick = () =>
+    board.orientation(board.orientation() === "white" ? "black" : "white");
 
-  btnFlip.onclick = () => {
-    orientation = (orientation === "white") ? "black" : "white";
-    board.orientation(orientation);
-  };
-
-  // Make sure board follows CSS size changes (mobile/rotation)
   window.addEventListener("resize", () => board.resize());
 })();
 </script>
