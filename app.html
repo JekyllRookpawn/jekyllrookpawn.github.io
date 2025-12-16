@@ -20,7 +20,6 @@ pgn: |
 
 <title>{{ page.title }}</title>
 
-<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <link rel="stylesheet"
@@ -107,16 +106,47 @@ html, body {
   border-radius: 10px;
   background: #1f2430;
   color: #ddd;
-  font-size: 16px;
+  font-size: 15px;
+}
+
+.controls button:disabled {
+  opacity: .4;
+}
+
+/* ---------- RIGHT PANE ---------- */
+.pane {
+  display: none;
+}
+
+.pane.active {
+  display: block;
+}
+
+/* ---------- TABS ---------- */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #222;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px;
+  cursor: pointer;
+  background: #141820;
+}
+
+.tab.active {
+  background: #1f2430;
+  font-weight: 600;
 }
 
 /* ---------- MOVES ---------- */
 .moves {
   padding: 16px;
-  overflow-y: auto;
-  line-height: 2.2;
   font-size: 18px;
-  border-top: 1px solid #222;
+  line-height: 2.2;
+  overflow-y: auto;
 }
 
 .move {
@@ -131,15 +161,29 @@ html, body {
   color: #fff;
 }
 
+/* ---------- PGN ---------- */
+.pgn-wrap {
+  padding: 12px;
+}
+
+textarea {
+  width: 100%;
+  height: 260px;
+  background: #0f1115;
+  color: #e6e6e6;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 14px;
+  resize: vertical;
+}
+
 /* ---------- DESKTOP ---------- */
 @media (min-width: 900px) {
   .main {
     display: grid;
     grid-template-columns: 560px 1fr;
-  }
-  .moves {
-    border-top: none;
-    border-left: 1px solid #222;
   }
 }
 </style>
@@ -157,6 +201,8 @@ html, body {
   </div>
 
   <div class="main">
+
+    <!-- LEFT -->
     <div>
       <div class="board-wrap">
         <div id="board"></div>
@@ -164,13 +210,42 @@ html, body {
 
       <div class="controls">
         <div class="controls-row">
+          <button id="btnFirst">⏮</button>
+          <button id="btnPrev">◀</button>
+          <button id="btnPlay">▶</button>
+          <button id="btnNext">▶</button>
+          <button id="btnLast">⏭</button>
+        </div>
+
+        <div class="controls-row">
           <button id="btnFlip">↺ Flip</button>
-          <button id="btnReset">Reset</button>
+          <button id="btnCopyPGN">Copy PGN</button>
+          <button id="btnCopyFEN">Copy FEN</button>
         </div>
       </div>
     </div>
 
-    <div class="moves" id="moves"></div>
+    <!-- RIGHT -->
+    <div>
+      <div class="tabs">
+        <div class="tab active" data-tab="moves">Moves</div>
+        <div class="tab" data-tab="pgn">PGN</div>
+      </div>
+
+      <div id="movesPane" class="pane active">
+        <div class="moves" id="moves"></div>
+      </div>
+
+      <div id="pgnPane" class="pane">
+        <div class="pgn-wrap">
+          <textarea id="pgnText"></textarea>
+          <div class="controls-row" style="margin-top:8px">
+            <button id="btnCopyPGN2">Copy PGN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -181,11 +256,11 @@ html, body {
 <script>
 (() => {
   const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
-  const movesDiv = document.getElementById("moves");
 
   const chess = new Chess();
+  const movesDiv = document.getElementById("moves");
+  const pgnText = document.getElementById("pgnText");
 
-  /* Load PGN if provided */
   const pgnEl = document.getElementById("pgn-data");
   if (pgnEl && pgnEl.textContent.trim()) {
     chess.load_pgn(JSON.parse(pgnEl.textContent), { sloppy: true });
@@ -198,22 +273,23 @@ html, body {
     onDrop: onDrop
   });
 
-  function sanToFig(san) {
-    let s = san.replace(/^[KQRBN]/, p => FIG[p]);
-    s = s.replace(/=([QRBN])/g, (_,p)=>"="+FIG[p]);
-    return s;
+  function sanFig(s) {
+    return s.replace(/^[KQRBN]/, p => FIG[p])
+            .replace(/=([QRBN])/g, (_,p)=>"="+FIG[p]);
   }
 
   function renderMoves() {
     movesDiv.innerHTML = "";
     chess.history({ verbose: true }).forEach((m, i) => {
       const span = document.createElement("span");
-      span.className = "move";
       const num = m.color === "w" ? `${Math.floor(i/2)+1}. ` : "";
-      span.textContent = num + sanToFig(m.san) + " ";
+      span.className = "move";
+      span.textContent = num + sanFig(m.san) + " ";
       span.onclick = () => gotoMove(i);
       movesDiv.appendChild(span);
     });
+    updateButtons();
+    pgnText.value = chess.pgn();
   }
 
   function gotoMove(i) {
@@ -236,12 +312,37 @@ html, body {
     highlight(chess.history().length - 1);
   }
 
-  document.getElementById("btnFlip").onclick = () =>
+  function updateButtons() {
+    const hasMoves = chess.history().length > 0;
+    ["btnFirst","btnPrev","btnPlay","btnNext","btnLast"]
+      .forEach(id => document.getElementById(id).disabled = !hasMoves);
+  }
+
+  /* Controls */
+  btnFlip.onclick = () =>
     board.orientation(board.orientation() === "white" ? "black" : "white");
 
-  document.getElementById("btnReset").onclick = () => {
+  btnCopyPGN.onclick = btnCopyPGN2.onclick = () =>
+    navigator.clipboard.writeText(chess.pgn());
+
+  btnCopyFEN.onclick = () =>
+    navigator.clipboard.writeText(chess.fen());
+
+  /* Tabs */
+  document.querySelectorAll(".tab").forEach(t =>
+    t.onclick = () => {
+      document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+      document.querySelectorAll(".pane").forEach(x=>x.classList.remove("active"));
+      t.classList.add("active");
+      document.getElementById(t.dataset.tab+"Pane").classList.add("active");
+    }
+  );
+
+  /* PGN edit */
+  pgnText.onblur = () => {
     chess.reset();
-    board.position("start", true);
+    if (pgnText.value.trim()) chess.load_pgn(pgnText.value, { sloppy:true });
+    board.position(chess.fen(), true);
     renderMoves();
   };
 
