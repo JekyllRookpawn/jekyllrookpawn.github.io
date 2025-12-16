@@ -10,15 +10,7 @@ pgn: |
   [Black "Black Player"]
   [Result "1-0"]
 
-  1. e4 {King's Pawn} e5
-  2. Nf3 Nc6?!
-  3. Bb5 a6
-  4. Ba4 Nf6
-  5. O-O Be7?!
-  6. Re1 b5
-  7. Bb3 d6
-  8. c3 O-O
-  9. h3 {A quiet move} 1-0
+  1. e4 e5 2. Nf3 Nc6
 ---
 <!doctype html>
 <html lang="en">
@@ -28,7 +20,6 @@ pgn: |
 
 <title>{{ page.title }}</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <link rel="stylesheet"
@@ -65,17 +56,11 @@ html, body {
 .brand img {
   width: 22px;
   height: 22px;
-  filter: invert(1); /* reversed colors */
+  filter: invert(1);
 }
 
 .title {
   font-weight: 700;
-}
-
-#gameLine {
-  margin-left: auto;
-  font-size: 14px;
-  opacity: .85;
 }
 
 /* ---------- LAYOUT ---------- */
@@ -124,16 +109,12 @@ html, body {
   font-size: 16px;
 }
 
-.controls button:active {
-  background: #2a3150;
-}
-
 /* ---------- MOVES ---------- */
 .moves {
   padding: 16px;
   overflow-y: auto;
   line-height: 2.2;
-  font-size: 18px;      /* significantly larger */
+  font-size: 18px;
   border-top: 1px solid #222;
 }
 
@@ -144,29 +125,9 @@ html, body {
   display: inline-block;
 }
 
-.move:hover {
-  background: #20263a;
-}
-
 .move.active {
   background: #3a7afe;
   color: #fff;
-}
-
-.nag {
-  color: #ffcc00;
-  margin-left: 2px;
-}
-
-.comment {
-  display: none;
-  margin: 6px 0 10px 18px;
-  padding: 8px 10px;
-  background: #1c2230;
-  border-left: 3px solid #3a7afe;
-  border-radius: 8px;
-  font-size: 15px;
-  color: #cfd6ff;
 }
 
 /* ---------- DESKTOP ---------- */
@@ -178,7 +139,6 @@ html, body {
   .moves {
     border-top: none;
     border-left: 1px solid #222;
-    min-height: calc(100vh - 52px);
   }
 }
 </style>
@@ -193,7 +153,6 @@ html, body {
       <img src="https://jekyllchess.github.io/assets/favicon.png" alt="">
       <div class="title">JekyllChess PGN App</div>
     </div>
-    <div id="gameLine"></div>
   </div>
 
   <div class="main">
@@ -204,14 +163,8 @@ html, body {
 
       <div class="controls">
         <div class="controls-row">
-          <button id="btnFirst">⏮</button>
-          <button id="btnPrev">◀</button>
-          <button id="btnPlay">▶</button>
-          <button id="btnNext">▶</button>
-          <button id="btnLast">⏭</button>
-        </div>
-        <div class="controls-row">
-          <button id="btnFlip">↺ Flip board</button>
+          <button id="btnFlip">↺ Flip</button>
+          <button id="btnReset">Reset</button>
         </div>
       </div>
     </div>
@@ -227,70 +180,71 @@ html, body {
 <script>
 (() => {
   const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
-
-  function sanToFig(san) {
-    const nag = san.match(/[!?]+$/)?.[0] || "";
-    let core = san.replace(/[!?]+$/, "");
-    core = core.replace(/^[KQRBN]/, p => FIG[p]);
-    core = core.replace(/=([QRBN])/g, (_,p)=>"="+FIG[p]);
-    return { core, nag };
-  }
-
-  const chess = new Chess();
-  chess.load_pgn(JSON.parse(pgnData.textContent), { sloppy: true });
-  const initialMoves = chess.history({ verbose: true });
-  chess.reset();
-
   const movesDiv = document.getElementById("moves");
 
-  let moves = [];
-  let index = -1;
+  const chess = new Chess();
 
-  function renderMove(m, i) {
-    const span = document.createElement("span");
-    span.className = "move";
-
-    const { core, nag } = sanToFig(m.san);
-    const num = m.color === "w" ? `${Math.floor(i/2)+1}. ` : "";
-
-    span.innerHTML = `${num}${core}${nag ? `<span class="nag">${nag}</span>` : ""} `;
-    span.onclick = () => goto(i);
-
-    movesDiv.appendChild(span);
+  /* Load PGN if provided */
+  const pgnEl = document.getElementById("pgn-data");
+  if (pgnEl && pgnEl.textContent.trim()) {
+    chess.load_pgn(JSON.parse(pgnEl.textContent), { sloppy: true });
   }
-
-  function goto(i) {
-    chess.reset();
-    for (let j = 0; j <= i; j++) chess.move(moves[j]);
-    board.position(chess.fen(), true);
-    index = i;
-    document.querySelectorAll(".move")
-      .forEach((m,k)=>m.classList.toggle("active",k===i));
-  }
-
-  initialMoves.forEach(m => {
-    moves.push(m);
-    renderMove(m, moves.length - 1);
-  });
 
   const board = Chessboard("board", {
-    position: "start",
+    position: chess.fen(),
     draggable: true,
     pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
-    onDrop: (src, dst) => {
-      const move = chess.move({ from: src, to: dst, promotion: "q" });
-      if (!move) return "snapback";
-
-      moves.push(move);
-      renderMove(move, moves.length - 1);
-      goto(moves.length - 1);
-    }
+    onDrop: onDrop
   });
+
+  function sanToFig(san) {
+    let s = san.replace(/^[KQRBN]/, p => FIG[p]);
+    s = s.replace(/=([QRBN])/g, (_,p)=>"="+FIG[p]);
+    return s;
+  }
+
+  function renderMoves() {
+    movesDiv.innerHTML = "";
+    chess.history({ verbose: true }).forEach((m, i) => {
+      const span = document.createElement("span");
+      span.className = "move";
+      const num = m.color === "w" ? `${Math.floor(i/2)+1}. ` : "";
+      span.textContent = num + sanToFig(m.san) + " ";
+      span.onclick = () => gotoMove(i);
+      movesDiv.appendChild(span);
+    });
+  }
+
+  function gotoMove(i) {
+    chess.reset();
+    const hist = chess.history({ verbose: true });
+    for (let j = 0; j <= i; j++) chess.move(hist[j]);
+    board.position(chess.fen(), true);
+    highlight(i);
+  }
+
+  function highlight(i) {
+    [...document.querySelectorAll(".move")]
+      .forEach((m,k)=>m.classList.toggle("active", k===i));
+  }
+
+  function onDrop(from, to) {
+    const move = chess.move({ from, to, promotion: "q" });
+    if (!move) return "snapback";
+    renderMoves();
+    highlight(chess.history().length - 1);
+  }
 
   document.getElementById("btnFlip").onclick = () =>
     board.orientation(board.orientation() === "white" ? "black" : "white");
 
-  window.addEventListener("resize", () => board.resize());
+  document.getElementById("btnReset").onclick = () => {
+    chess.reset();
+    board.position("start", true);
+    renderMoves();
+  };
+
+  renderMoves();
 })();
 </script>
 
