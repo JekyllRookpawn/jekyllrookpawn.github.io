@@ -55,26 +55,50 @@ html, body {
 
 /* ---------- TOP BAR ---------- */
 .topbar {
-  height: 52px;
+  min-height: 52px;
   padding: 0 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: #171a21;
   border-bottom: 1px solid #222;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand img {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
 .title {
-  font-weight: 600;
-  letter-spacing: .3px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  white-space: nowrap;
 }
 
 #gameLine {
   opacity: .85;
   font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .spacer { flex: 1; }
+
+/* ---------- MAIN (MOBILE FIRST) ---------- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ---------- BOARD ---------- */
 .board-wrap {
@@ -82,21 +106,28 @@ html, body {
 }
 
 #board {
-  width: 100%;
+  width: min(92vw, 560px); /* bigger board */
+  margin: 0 auto;
 }
 
 /* ---------- CONTROLS ---------- */
 .controls {
+  padding: 0 12px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.controls-row {
   display: flex;
   gap: 6px;
-  padding: 8px 12px;
 }
 
 .controls button {
   flex: 1;
   padding: 10px 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 10px;
   background: #1f2430;
   color: #ddd;
   font-size: 16px;
@@ -106,18 +137,25 @@ html, body {
   background: #2a3150;
 }
 
+/* Flip button under the second row */
+#btnFlip {
+  width: 100%;
+}
+
 /* ---------- MOVES ---------- */
 .moves {
   padding: 12px;
   overflow-y: auto;
   line-height: 1.9;
   font-size: 15px;
+  border-top: 1px solid #222;
 }
 
 .move {
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: 6px;
+  display: inline-block;
 }
 
 .move:hover {
@@ -140,7 +178,7 @@ html, body {
   padding: 6px 8px;
   background: #1c2230;
   border-left: 3px solid #3a7afe;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 14px;
   color: #cfd6ff;
 }
@@ -148,9 +186,14 @@ html, body {
 /* ---------- DESKTOP ---------- */
 @media (min-width: 900px) {
   .main {
-    flex: 1;
     display: grid;
-    grid-template-columns: 420px 1fr;
+    grid-template-columns: 560px 1fr; /* match bigger board */
+    align-items: start;
+  }
+  .moves {
+    border-top: none;
+    border-left: 1px solid #222;
+    min-height: calc(100vh - 52px);
   }
 }
 </style>
@@ -161,10 +204,12 @@ html, body {
 <div class="app">
 
   <div class="topbar">
-    <div class="title">♟ PGN Viewer</div>
-    <div id="gameLine"></div>
+    <div class="brand">
+      <img src="https://jekyllchess.github.io/assets/favicon.png" alt="JekyllChess">
+      <div class="title">JekyllChess PGN App</div>
+    </div>
     <div class="spacer"></div>
-    <button id="btnFlip">↺</button>
+    <div id="gameLine"></div>
   </div>
 
   <div class="main">
@@ -174,11 +219,17 @@ html, body {
       </div>
 
       <div class="controls">
-        <button id="btnFirst">⏮</button>
-        <button id="btnPrev">◀</button>
-        <button id="btnPlay">▶️</button>
-        <button id="btnNext">▶</button>
-        <button id="btnLast">⏭</button>
+        <div class="controls-row">
+          <button id="btnFirst" aria-label="First">⏮</button>
+          <button id="btnPrev" aria-label="Previous">◀</button>
+          <button id="btnPlay" aria-label="Play/Pause">▶</button>
+          <button id="btnNext" aria-label="Next">▶</button>
+          <button id="btnLast" aria-label="Last">⏭</button>
+        </div>
+
+        <div class="controls-row">
+          <button id="btnFlip" aria-label="Flip board">↺ Flip board</button>
+        </div>
       </div>
     </div>
 
@@ -193,9 +244,7 @@ html, body {
 
 <script>
 (() => {
-  const pgn = JSON.parse(
-    document.getElementById("pgn-data").textContent
-  );
+  const pgn = JSON.parse(document.getElementById("pgn-data").textContent);
 
   const chess = new Chess();
   chess.load_pgn(pgn, { sloppy: true });
@@ -205,30 +254,57 @@ html, body {
 
   const board = Chessboard("board", {
     position: "start",
-    pieceTheme:
-      "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png"
+    pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png"
   });
 
+  // Elements
   const movesDiv = document.getElementById("moves");
   const gameLine = document.getElementById("gameLine");
 
+  const btnFirst = document.getElementById("btnFirst");
+  const btnPrev  = document.getElementById("btnPrev");
+  const btnPlay  = document.getElementById("btnPlay");
+  const btnNext  = document.getElementById("btnNext");
+  const btnLast  = document.getElementById("btnLast");
+  const btnFlip  = document.getElementById("btnFlip");
+
+  // Header line (players)
   const h = chess.header();
-  gameLine.textContent =
-    `${h.White || ""} – ${h.Black || ""}`;
+  gameLine.textContent = `${h.White || ""} – ${h.Black || ""}`.trim();
+
+  // Figurine SAN (very small, robust conversion)
+  const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
+  function sanToFigurine(san) {
+    if (!san) return san;
+
+    // Split trailing NAGs like "?!", "!!", "?!", etc.
+    const nagMatch = san.match(/[!?]+$/);
+    const nag = nagMatch ? nagMatch[0] : "";
+    let core = nag ? san.slice(0, -nag.length) : san;
+
+    // Replace leading piece letter with figurine
+    core = core.replace(/^[KQRBN]/, ch => FIG[ch] || ch);
+
+    // Replace promotion piece (e.g. e8=Q+)
+    core = core.replace(/=([QRBN])/g, (_, p) => "=" + (FIG[p] || p));
+
+    return { core, nag };
+  }
 
   let index = -1;
   let autoplay = null;
   let orientation = "white";
 
+  // Render moves
   moves.forEach((m, i) => {
     const moveSpan = document.createElement("span");
     moveSpan.className = "move";
-    moveSpan.innerHTML =
-      (m.color === "w" ? `${Math.floor(i/2)+1}. ` : "") +
-      m.san.replace(/[!?]+/g, s =>
-        `<span class="nag">${s}</span>`
-      ) + " ";
 
+    const { core, nag } = sanToFigurine(m.san);
+    const moveNo = (m.color === "w") ? `${Math.floor(i / 2) + 1}. ` : "";
+    const nagHtml = nag ? `<span class="nag">${nag}</span>` : "";
+
+    moveSpan.innerHTML = `${moveNo}${core}${nagHtml} `;
     movesDiv.appendChild(moveSpan);
 
     let commentDiv = null;
@@ -242,17 +318,14 @@ html, body {
     moveSpan.onclick = () => {
       goto(i);
       if (commentDiv) {
-        commentDiv.style.display =
-          commentDiv.style.display === "block"
-            ? "none"
-            : "block";
+        commentDiv.style.display = (commentDiv.style.display === "block") ? "none" : "block";
       }
     };
   });
 
   function highlight(i) {
     document.querySelectorAll(".move")
-      .forEach((m,k)=>m.classList.toggle("active",k===i));
+      .forEach((m, k) => m.classList.toggle("active", k === i));
   }
 
   function resetBoard() {
@@ -281,9 +354,9 @@ html, body {
     else stop();
   }
 
+  // Controls
   btnFirst.onclick = resetBoard;
-  btnPrev.onclick = () =>
-    index > 0 ? goto(index - 1) : resetBoard();
+  btnPrev.onclick = () => (index > 0 ? goto(index - 1) : resetBoard());
   btnNext.onclick = next;
   btnLast.onclick = () => goto(moves.length - 1);
 
@@ -294,10 +367,12 @@ html, body {
   };
 
   btnFlip.onclick = () => {
-    orientation =
-      orientation === "white" ? "black" : "white";
+    orientation = (orientation === "white") ? "black" : "white";
     board.orientation(orientation);
   };
+
+  // Make sure board follows CSS size changes (mobile/rotation)
+  window.addEventListener("resize", () => board.resize());
 })();
 </script>
 
