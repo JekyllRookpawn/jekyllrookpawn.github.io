@@ -6,10 +6,7 @@
 
 <title>JekyllChess PGN App</title>
 
-<!-- jQuery REQUIRED by chessboard.js -->
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
-
-<!-- Chess libs -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
 <link rel="stylesheet"
@@ -17,256 +14,82 @@
 
 <style>
 *{box-sizing:border-box}
-body{
-  margin:0;
-  background:#0f1115;
-  color:#e6e6e6;
-  font-family:system-ui,-apple-system,sans-serif;
-}
-
-/* ---------- header ---------- */
-.top{
-  padding:10px 14px;
-  background:#171a21;
-  border-bottom:1px solid #222;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-.top img{width:22px;height:22px;filter:invert(1)}
-.top .title{font-weight:700}
-
-/* ---------- layout ---------- */
-.wrap{padding:12px;display:flex;flex-direction:column;gap:12px}
-.main{
-  display:grid;
-  grid-template-columns:1fr;
-  gap:12px;
-}
-@media(min-width:900px){
-  .main{grid-template-columns:560px 1fr}
-}
-
-#board{margin:0 auto}
-
-/* ---------- nav ---------- */
-.controls{
-  display:flex;
-  gap:6px;
-  margin:0 auto;
-}
-.controls button{
-  padding:10px 14px;
-  border:none;
-  border-radius:10px;
-  background:#1f2430;
-  color:#ddd;
-  cursor:pointer;
-}
-.controls button:disabled{opacity:.4}
-
-/* ---------- panels ---------- */
-.card{
-  border:1px solid #222;
-  border-radius:12px;
-  background:#0f1115;
-}
-.card .head{
-  padding:10px 12px;
-  background:#141820;
-  border-bottom:1px solid #222;
-  font-weight:600;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-}
-.card .body{padding:12px}
-
-/* ---------- tabs ---------- */
+body{margin:0;background:#0f1115;color:#e6e6e6;font-family:system-ui}
+.top{padding:10px 14px;background:#171a21;border-bottom:1px solid #222;display:flex;gap:10px}
+.top img{width:22px;filter:invert(1)}
+.wrap{padding:12px}
+.main{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:900px){.main{grid-template-columns:560px 1fr}}
+.controls{display:flex;gap:6px;justify-content:center}
+.controls button{padding:10px;border:none;border-radius:10px;background:#1f2430;color:#ddd}
+.card{border:1px solid #222;border-radius:12px}
+.card .head{padding:10px;background:#141820;border-bottom:1px solid #222;display:flex;justify-content:space-between}
 .tabs{display:flex;gap:6px}
-.tabBtn{
-  border:none;
-  background:#1f2430;
-  color:#ddd;
-  padding:6px 10px;
-  border-radius:999px;
-  cursor:pointer;
-  font-weight:600;
-  font-size:13px;
-}
+.tabBtn{border:none;background:#1f2430;color:#ddd;padding:6px 10px;border-radius:999px}
 .tabBtn.active{background:#3a7afe;color:#fff}
-
-/* ---------- move list ---------- */
 .moves{font-size:18px;line-height:2.1}
-.move{
-  display:inline-block;
-  padding:2px 6px;
-  border-radius:7px;
-  cursor:pointer;
-}
+.move{display:inline-block;padding:2px 6px;border-radius:7px;cursor:pointer}
 .move.active{background:#3a7afe;color:#fff}
-
-.variation{
-  margin:6px 0 10px 26px;
-  padding-left:10px;
-  border-left:2px dashed #444;
-}
-
-.commentRow{
-  margin:4px 0 10px 18px;
-  padding:6px 8px;
-  border-left:3px solid #3a7afe;
-  background:#121724;
-  font-size:14px;
-}
-
-/* ---------- PGN ---------- */
-.pgnBox{
-  width:100%;
-  height:320px;
-  border-radius:12px;
-  border:1px solid #222;
-  background:#0f1115;
-  color:#e6e6e6;
-  padding:12px;
-  font-family:ui-monospace,monospace;
-}
-.pgnActions{display:flex;gap:8px;margin-top:10px}
-.pgnActions button{
-  flex:1;
-  padding:10px 0;
-  border:none;
-  border-radius:10px;
-  background:#1f2430;
-  color:#ddd;
-  cursor:pointer;
-}
-
-/* ---------- tooltip ---------- */
-#tooltip{
-  position:absolute;
-  display:none;
-  background:#141820;
-  border:1px solid #2a3150;
-  border-radius:10px;
-  padding:8px;
-  z-index:1000;
-}
+.variation{margin-left:26px;border-left:2px dashed #444;padding-left:10px}
+.commentRow{margin:4px 0 10px 18px;padding:6px 8px;border-left:3px solid #3a7afe;background:#121724}
+.pgnBox{width:100%;height:320px;background:#0f1115;color:#e6e6e6;border:1px solid #222;border-radius:12px;padding:12px}
+#tooltip{position:absolute;display:none;background:#141820;border:1px solid #2a3150;border-radius:10px;padding:8px;z-index:1000}
 #tooltip .row{display:flex;gap:6px}
-#tooltip button{
-  background:#1f2430;
-  border:none;
-  border-radius:8px;
-  padding:6px 8px;
-  font-size:16px;
-  color:#ddd;
-  cursor:pointer;
-}
-#tooltip textarea{
-  width:200px;
-  min-height:70px;
-  background:#0f1115;
-  color:#e6e6e6;
-  border:1px solid #2a3150;
-  border-radius:8px;
-  padding:8px;
-  font-size:14px;
-}
+#tooltip button{background:#1f2430;border:none;border-radius:8px;padding:6px 8px;color:#ddd}
+#tooltip textarea{width:200px;min-height:70px;background:#0f1115;color:#e6e6e6;border:1px solid #2a3150;border-radius:8px;padding:8px}
 </style>
 </head>
 
 <body>
 
 <div class="top">
-  <img src="https://jekyllchess.github.io/assets/favicon.png" alt="">
-  <div class="title">JekyllChess PGN App</div>
+  <img src="https://jekyllchess.github.io/assets/favicon.png">
+  <div>JekyllChess PGN App</div>
 </div>
 
 <div class="wrap">
-  <div class="main">
+<div class="main">
 
-    <!-- LEFT -->
-    <div>
-      <div id="board"></div>
-      <div class="controls">
-        <button id="btnStart">⏮</button>
-        <button id="btnPrev">◀</button>
-        <button id="btnNext">▶</button>
-        <button id="btnEnd">⏭</button>
-      </div>
-    </div>
-
-    <!-- RIGHT -->
-    <div class="card">
-      <div class="head">
-        <div>Move list</div>
-        <div class="tabs">
-          <button id="tabMoves" class="tabBtn active" type="button">Move list</button>
-          <button id="tabPGN" class="tabBtn" type="button">PGN text</button>
-        </div>
-      </div>
-
-      <div class="body">
-        <div id="panelMoves">
-          <div class="moves" id="moves"></div>
-        </div>
-
-        <div id="panelPGN" style="display:none">
-          <textarea id="pgnText" class="pgnBox" spellcheck="false"></textarea>
-          <div class="pgnActions">
-            <button id="copyPGN" type="button">Copy PGN</button>
-            <button id="copyFEN" type="button">Copy FEN</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
+<div>
+  <div id="board"></div>
+  <div class="controls">
+    <button id="btnStart">⏮</button>
+    <button id="btnPrev">◀</button>
+    <button id="btnNext">▶</button>
+    <button id="btnEnd">⏭</button>
   </div>
+</div>
+
+<div class="card">
+  <div class="head">
+    <div>Move list</div>
+    <div class="tabs">
+      <button id="tabMoves" class="tabBtn active">Move list</button>
+      <button id="tabPGN" class="tabBtn">PGN text</button>
+    </div>
+  </div>
+  <div class="body">
+    <div id="panelMoves"><div id="moves" class="moves"></div></div>
+    <div id="panelPGN" style="display:none">
+      <textarea id="pgnText" class="pgnBox"></textarea>
+    </div>
+  </div>
+</div>
+
+</div>
 </div>
 
 <div id="tooltip"></div>
 
 <script>
-(() => {
 const FIG={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
 const figSAN=s=>s.replace(/^[KQRBN]/,p=>FIG[p]||p).replace(/=([QRBN])/g,(_,p)=>"="+FIG[p]);
 
-/* ---------- tree ---------- */
-let NODE_SEQ=1;
-class Node{
-  constructor(san,parent){
-    this.id="n"+NODE_SEQ++;
-    this.san=san;
-    this.comment="";
-    this.parent=parent;
-    this.next=null;
-    this.variations=[];
-  }
-}
+let NODE=1;
+class Node{constructor(s,p){this.id="n"+NODE++;this.san=s;this.p=p;this.n=null;this.v=[];this.c=""}}
 const root=new Node(null,null);
-let cursor=root;
-let navNode=null;
+let cursor=root,nav=null;
 
-/* ---------- DOM ---------- */
-const movesDiv=document.getElementById("moves");
-const pgnText=document.getElementById("pgnText");
-const boardEl=document.getElementById("board");
-const tooltip=document.getElementById("tooltip");
-
-const btnStart=document.getElementById("btnStart");
-const btnPrev=document.getElementById("btnPrev");
-const btnNext=document.getElementById("btnNext");
-const btnEnd=document.getElementById("btnEnd");
-
-const tabMoves=document.getElementById("tabMoves");
-const tabPGN=document.getElementById("tabPGN");
-const panelMoves=document.getElementById("panelMoves");
-const panelPGN=document.getElementById("panelPGN");
-
-const copyPGN=document.getElementById("copyPGN");
-const copyFEN=document.getElementById("copyFEN");
-
-/* ---------- chess ---------- */
 const chess=new Chess();
 const board=Chessboard("board",{
   position:"start",
@@ -275,356 +98,80 @@ const board=Chessboard("board",{
   onDrop
 });
 
-/* ---------- tooltip ---------- */
-function hideTooltip(){
-  tooltip.style.display="none";
+const tooltip=document.getElementById("tooltip");
+document.body.onclick=()=>tooltip.style.display="none";
+tooltip.onclick=e=>e.stopPropagation();
+
+function showPromotion(x,y,cb){
   tooltip.innerHTML="";
-  // cancel pending promotion if user clicks away
-  pendingPromotion=null;
-}
-document.body.addEventListener("click", hideTooltip);
-tooltip.addEventListener("mousedown", e => e.stopPropagation());
-tooltip.addEventListener("click", e => e.stopPropagation());
-
-function showTooltip(x,y,el){
-  tooltip.innerHTML="";
-  tooltip.appendChild(el);
-  tooltip.style.left=x+"px";
-  tooltip.style.top=y+"px";
-  tooltip.style.display="block";
-}
-
-/* ---------- rebuild ---------- */
-function rebuildTo(n,animate=true){
-  chess.reset();
-  const chain=[];
-  while(n&&n!==root){chain.push(n);n=n.parent}
-  chain.reverse().forEach(m=>chess.move(m.san));
-  board.position(chess.fen(),animate);
-}
-
-/* ---------- PGN ---------- */
-function serializeFrom(node,startPly){
-  let out=[],ply=startPly;
-  let n=node.next;
-  while(n){
-    const moveNo=Math.floor(ply/2)+1;
-    if(ply%2===0) out.push(moveNo+".");
-    out.push(n.san);
-    if(n.comment) out.push("{"+n.comment+"}");
-    n.variations.forEach(v=>{
-      out.push("("+serializeFrom({next:v},ply+1)+")");
-    });
-    n=n.next; ply++;
-  }
-  return out.join(" ").trim();
-}
-function syncPGN(){
-  pgnText.value=(serializeFrom(root,0)+" *").trim()+"\n";
-}
-
-/* ---------- tabs ---------- */
-function setTab(which){
-  const movesOn = which==="moves";
-  tabMoves.classList.toggle("active",movesOn);
-  tabPGN.classList.toggle("active",!movesOn);
-  panelMoves.style.display=movesOn?"block":"none";
-  panelPGN.style.display=movesOn?"none":"block";
-}
-tabMoves.addEventListener("click",(e)=>{e.stopPropagation();setTab("moves");});
-tabPGN.addEventListener("click",(e)=>{e.stopPropagation();setTab("pgn");});
-
-/* ---------- helpers ---------- */
-function mainlineNodes(){
-  const a=[]; let n=root.next;
-  while(n){a.push(n);n=n.next}
-  return a;
-}
-function isOnMainline(n){
-  let m=root.next;
-  while(m){if(m===n)return true;m=m.next}
-  return false;
-}
-function updateNavButtons(){
-  const has=mainlineNodes().length>0;
-  [btnStart,btnPrev,btnNext,btnEnd].forEach(b=>b.disabled=!has);
-}
-function clearActive(){
-  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
-}
-
-/* ---------- navigation ---------- */
-btnStart.addEventListener("click",(e)=>{e.stopPropagation();hideTooltip();cursor=root;navNode=null;rebuildTo(root,true);clearActive();});
-btnEnd.addEventListener("click",(e)=>{
-  e.stopPropagation();hideTooltip();
-  const a=mainlineNodes(); if(!a.length)return;
-  navNode=a[a.length-1]; cursor=navNode; rebuildTo(navNode,true);
-});
-btnPrev.addEventListener("click",(e)=>{
-  e.stopPropagation();hideTooltip();
-  const a=mainlineNodes(); if(!navNode)return;
-  const i=a.indexOf(navNode); if(i<=0){cursor=root;navNode=null;rebuildTo(root,true);clearActive();return;}
-  navNode=a[i-1]; cursor=navNode; rebuildTo(navNode,true);
-});
-btnNext.addEventListener("click",(e)=>{
-  e.stopPropagation();hideTooltip();
-  const a=mainlineNodes(); if(!a.length)return;
-  if(!navNode) navNode=a[0];
-  else navNode=a[Math.min(a.length-1,a.indexOf(navNode)+1)];
-  cursor=navNode; rebuildTo(navNode,true);
-});
-
-/* ---------- rendering ---------- */
-function renderLine(start,container,ply){
-  let n=start.next;
-  while(n){
-    const node=n;
-
-    const span=document.createElement("span");
-    span.className="move";
-    span.dataset.nodeId=node.id;
-    span.textContent=((ply%2===0)?(Math.floor(ply/2)+1)+". ":"")+figSAN(node.san)+" ";
-
-    span.addEventListener("click",(e)=>{
-      e.stopPropagation();
-      clearActive(); span.classList.add("active");
-      cursor=node;
-      if(isOnMainline(node)) navNode=node;
-      rebuildTo(node,true);
-      showMoveMenu(e.pageX,e.pageY,node);
-    });
-
-    container.appendChild(span);
-
-    if(node.comment){
-      const c=document.createElement("div");
-      c.className="commentRow";
-      c.textContent=node.comment;
-      container.appendChild(c);
-    }
-
-    node.variations.forEach(v=>{
-      const vd=document.createElement("div");
-      vd.className="variation";
-      renderVariation(v,vd,ply);
-      container.appendChild(vd);
-    });
-
-    n=n.next; ply++;
-  }
-}
-
-function renderVariation(vRoot,container,ply){
-  const node=vRoot;
-
-  const span=document.createElement("span");
-  span.className="move";
-  span.dataset.nodeId=node.id;
-  span.textContent=((ply%2===0)?(Math.floor(ply/2)+1)+". ":(Math.floor(ply/2)+1)+"... ")+figSAN(node.san)+" ";
-
-  span.addEventListener("click",(e)=>{
-    e.stopPropagation();
-    clearActive(); span.classList.add("active");
-    cursor=node;
-    rebuildTo(node,true);
-    showMoveMenu(e.pageX,e.pageY,node);
-  });
-
-  container.appendChild(span);
-
-  if(node.comment){
-    const c=document.createElement("div");
-    c.className="commentRow";
-    c.textContent=node.comment;
-    container.appendChild(c);
-  }
-
-  renderLine(node,container,ply+1);
-}
-
-function renderAll(){
-  movesDiv.innerHTML="";
-  renderLine(root,movesDiv,0);
-  syncPGN();
-  updateNavButtons();
-}
-
-/* ---------- tooltip menus ---------- */
-function showMoveMenu(x,y,node){
-  const row=document.createElement("div");
-  row.className="row";
-
-  if(node.parent && node.parent.variations.includes(node)){
-    const up=document.createElement("button");
-    up.textContent="⬆";
-    up.title="Promote variation";
-    up.addEventListener("click",()=>{promote(node);hideTooltip();renderAll();});
-    row.appendChild(up);
-  }
-
-  const plus=document.createElement("button");
-  plus.textContent="➕";
-  plus.title="Add/edit comment";
-  plus.addEventListener("click",()=>showCommentEditor(x,y,node));
-  row.appendChild(plus);
-
-  const del=document.createElement("button");
-  del.textContent="🗑";
-  del.title="Delete move/variation";
-  del.addEventListener("click",()=>{deleteNode(node);hideTooltip();});
-  row.appendChild(del);
-
-  showTooltip(x,y,row);
-}
-
-function showCommentEditor(x,y,node){
-  const box=document.createElement("div");
-
-  const ta=document.createElement("textarea");
-  ta.value=node.comment||"";
-  box.appendChild(ta);
-
-  const row=document.createElement("div");
-  row.className="row";
-
-  const save=document.createElement("button");
-  save.textContent="Save";
-  save.addEventListener("click",()=>{
-    node.comment=ta.value.replace(/\}/g,"").trim();
-    hideTooltip();
-    renderAll();
-  });
-
-  const cancel=document.createElement("button");
-  cancel.textContent="Cancel";
-  cancel.addEventListener("click",hideTooltip);
-
-  row.appendChild(save);
-  row.appendChild(cancel);
-  box.appendChild(row);
-
-  showTooltip(x,y,box);
-  setTimeout(()=>ta.focus(),0);
-}
-
-function showPromotionUI(x,y,onPick){
-  const row=document.createElement("div");
-  row.className="row";
+  const r=document.createElement("div");r.className="row";
   ["q","r","b","n"].forEach(p=>{
     const b=document.createElement("button");
     b.textContent=FIG[p.toUpperCase()];
-    b.addEventListener("click",()=>onPick(p));
-    row.appendChild(b);
+    b.onclick=()=>cb(p);
+    r.appendChild(b);
   });
-  showTooltip(x,y,row);
+  tooltip.appendChild(r);
+  tooltip.style.left=x+"px";tooltip.style.top=y+"px";tooltip.style.display="block";
 }
 
-/* ---------- structure ---------- */
-function deleteNode(n){
-  const p=n.parent; if(!p)return;
-  if(p.next===n) p.next=null;
-  p.variations=p.variations.filter(v=>v!==n);
-  cursor=p;
-  rebuildTo(p,true);
-  renderAll();
-}
-function promote(n){
-  const p=n.parent;
-  const i=p.variations.indexOf(n); if(i<0)return;
-  p.variations.splice(i,1);
-  if(p.next) p.variations.unshift(p.next);
-  p.next=n; n.parent=p;
+function rebuild(n){
+  chess.reset();
+  const a=[];
+  while(n&&n!==root){a.push(n);n=n.p}
+  a.reverse().forEach(m=>chess.move(m.san));
+  board.position(chess.fen(),false);
 }
 
-/* ---------- clipboard ---------- */
-function writeClipboard(text){
-  if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
-  const ta=document.createElement("textarea");
-  ta.value=text;
-  ta.style.position="fixed";
-  ta.style.left="-9999px";
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand("copy");
-  document.body.removeChild(ta);
-}
-copyPGN.addEventListener("click",(e)=>{e.stopPropagation();writeClipboard(pgnText.value);});
-copyFEN.addEventListener("click",(e)=>{e.stopPropagation();writeClipboard(chess.fen());});
-
-/* ---------- PROMOTION: reliable pending state ---------- */
-let pendingPromotion = null;
-
-/* ---------- move entry ---------- */
 function onDrop(from,to){
-  if(pendingPromotion) return "snapback";
+  const piece=chess.get(from);
+  const fenBefore=chess.fen();
+  const curBefore=cursor;
 
-  const piece = chess.get(from);
-
-  const commitFrom = (fenBefore, cursorBefore, promotion) => {
-    const test = new Chess(fenBefore);
-    const m = test.move({from,to,promotion});
-    if(!m){
-      board.position(fenBefore, false);
-      return;
-    }
-
-    // commit into tree at the cursor state that existed when the drag started
-    cursor = cursorBefore;
-
-    if(cursor.next && cursor.next.san === m.san){
-      cursor = cursor.next;
-    } else {
-      const nn = new Node(m.san, cursor);
-      if(!cursor.next) cursor.next = nn;
-      else cursor.variations.push(nn);
-      cursor = nn;
-    }
-
-    rebuildTo(cursor, false);
-    if(isOnMainline(cursor)) navNode = cursor;
-
-    pendingPromotion = null;
-    hideTooltip();
-    renderAll();
-  };
-
-  // Promotion candidate
-  if(piece && piece.type==="p" && (to[1]==="8" || to[1]==="1")){
-    const fenBefore = chess.fen();
-    const cursorBefore = cursor;
-
-    // guard legality
-    const guard = new Chess(fenBefore);
+  // PROMOTION (correct pattern)
+  if(piece&&piece.type==="p"&&(to[1]==="8"||to[1]==="1")){
+    const guard=new Chess(fenBefore);
     if(!guard.move({from,to,promotion:"q"})) return "snapback";
 
-    pendingPromotion = { from, to, fenBefore, cursorBefore };
-
-    const r = boardEl.getBoundingClientRect();
-    showPromotionUI(
-      r.left + r.width/2,
-      r.top + r.height/2,
-      (p) => commitFrom(fenBefore, cursorBefore, p)
-    );
-
-    // IMPORTANT: snap back immediately; then we re-place after user picks
-    return "snapback";
+    // let board drop pawn, but DO NOT commit yet
+    showPromotion(boardEl.getBoundingClientRect().left+260,200,(promo)=>{
+      chess.load(fenBefore);
+      const m=chess.move({from,to,promotion:promo});
+      cursor=curBefore;
+      const nn=new Node(m.san,cursor);
+      if(!cursor.n) cursor.n=nn; else cursor.v.push(nn);
+      cursor=nn;
+      board.position(chess.fen(),false);
+      render();
+    });
+    return;
   }
 
-  // Normal move
-  const fenBefore = chess.fen();
-  const test = new Chess(fenBefore);
-  const m = test.move({from,to,promotion:"q"});
+  const test=new Chess(fenBefore);
+  const m=test.move({from,to});
   if(!m) return "snapback";
 
-  // commit using the same pattern
-  commitFrom(fenBefore, cursor, "q");
+  chess.move(m.san);
+  const nn=new Node(m.san,cursor);
+  if(!cursor.n) cursor.n=nn; else cursor.v.push(nn);
+  cursor=nn;
+  render();
 }
 
-/* ---------- init ---------- */
-setTab("moves");
-renderAll();
-})();
+function render(){
+  const d=document.getElementById("moves");
+  d.innerHTML="";
+  let n=root.n;
+  let ply=0;
+  while(n){
+    const s=document.createElement("span");
+    s.className="move";
+    s.textContent=((ply%2===0)?Math.floor(ply/2)+1+". ":"")+figSAN(n.san)+" ";
+    d.appendChild(s);
+    n=n.n; ply++;
+  }
+}
+render();
 </script>
-
 </body>
 </html>
