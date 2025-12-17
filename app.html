@@ -201,8 +201,8 @@ body{
       <div class="head">
         <div>Move list</div>
         <div class="tabs">
-          <button id="tabMoves" class="tabBtn active">Move list</button>
-          <button id="tabPGN" class="tabBtn">PGN text</button>
+          <button id="tabMoves" class="tabBtn active" type="button">Move list</button>
+          <button id="tabPGN" class="tabBtn" type="button">PGN text</button>
         </div>
       </div>
 
@@ -214,8 +214,8 @@ body{
         <div id="panelPGN" style="display:none">
           <textarea id="pgnText" class="pgnBox" spellcheck="false"></textarea>
           <div class="pgnActions">
-            <button id="copyPGN">Copy PGN</button>
-            <button id="copyFEN">Copy FEN</button>
+            <button id="copyPGN" type="button">Copy PGN</button>
+            <button id="copyFEN" type="button">Copy FEN</button>
           </div>
         </div>
       </div>
@@ -263,6 +263,9 @@ const tabPGN=document.getElementById("tabPGN");
 const panelMoves=document.getElementById("panelMoves");
 const panelPGN=document.getElementById("panelPGN");
 
+const copyPGN=document.getElementById("copyPGN");
+const copyFEN=document.getElementById("copyFEN");
+
 /* ---------- chess ---------- */
 const chess=new Chess();
 const board=Chessboard("board",{
@@ -273,10 +276,15 @@ const board=Chessboard("board",{
 });
 
 /* ---------- tooltip ---------- */
-function hideTooltip(){ tooltip.style.display="none"; tooltip.innerHTML=""; }
-document.body.addEventListener("click",hideTooltip);
-tooltip.addEventListener("mousedown",e=>e.stopPropagation());
-tooltip.addEventListener("click",e=>e.stopPropagation());
+function hideTooltip(){
+  tooltip.style.display="none";
+  tooltip.innerHTML="";
+  // cancel pending promotion if user clicks away
+  pendingPromotion=null;
+}
+document.body.addEventListener("click", hideTooltip);
+tooltip.addEventListener("mousedown", e => e.stopPropagation());
+tooltip.addEventListener("click", e => e.stopPropagation());
 
 function showTooltip(x,y,el){
   tooltip.innerHTML="";
@@ -309,7 +317,7 @@ function serializeFrom(node,startPly){
     });
     n=n.next; ply++;
   }
-  return out.join(" ");
+  return out.join(" ").trim();
 }
 function syncPGN(){
   pgnText.value=(serializeFrom(root,0)+" *").trim()+"\n";
@@ -317,14 +325,14 @@ function syncPGN(){
 
 /* ---------- tabs ---------- */
 function setTab(which){
-  const movesOn=which==="moves";
+  const movesOn = which==="moves";
   tabMoves.classList.toggle("active",movesOn);
   tabPGN.classList.toggle("active",!movesOn);
   panelMoves.style.display=movesOn?"block":"none";
   panelPGN.style.display=movesOn?"none":"block";
 }
-tabMoves.onclick=e=>{e.stopPropagation();setTab("moves")};
-tabPGN.onclick=e=>{e.stopPropagation();setTab("pgn")};
+tabMoves.addEventListener("click",(e)=>{e.stopPropagation();setTab("moves");});
+tabPGN.addEventListener("click",(e)=>{e.stopPropagation();setTab("pgn");});
 
 /* ---------- helpers ---------- */
 function mainlineNodes(){
@@ -346,42 +354,46 @@ function clearActive(){
 }
 
 /* ---------- navigation ---------- */
-btnStart.onclick=e=>{e.stopPropagation();cursor=root;navNode=null;rebuildTo(root,true);clearActive()};
-btnEnd.onclick=e=>{
-  e.stopPropagation();
+btnStart.addEventListener("click",(e)=>{e.stopPropagation();hideTooltip();cursor=root;navNode=null;rebuildTo(root,true);clearActive();});
+btnEnd.addEventListener("click",(e)=>{
+  e.stopPropagation();hideTooltip();
   const a=mainlineNodes(); if(!a.length)return;
   navNode=a[a.length-1]; cursor=navNode; rebuildTo(navNode,true);
-};
-btnPrev.onclick=e=>{
-  e.stopPropagation();
+});
+btnPrev.addEventListener("click",(e)=>{
+  e.stopPropagation();hideTooltip();
   const a=mainlineNodes(); if(!navNode)return;
-  const i=a.indexOf(navNode); if(i<=0){btnStart.onclick(e);return;}
+  const i=a.indexOf(navNode); if(i<=0){cursor=root;navNode=null;rebuildTo(root,true);clearActive();return;}
   navNode=a[i-1]; cursor=navNode; rebuildTo(navNode,true);
-};
-btnNext.onclick=e=>{
-  e.stopPropagation();
+});
+btnNext.addEventListener("click",(e)=>{
+  e.stopPropagation();hideTooltip();
   const a=mainlineNodes(); if(!a.length)return;
   if(!navNode) navNode=a[0];
   else navNode=a[Math.min(a.length-1,a.indexOf(navNode)+1)];
   cursor=navNode; rebuildTo(navNode,true);
-};
+});
 
 /* ---------- rendering ---------- */
 function renderLine(start,container,ply){
   let n=start.next;
   while(n){
     const node=n;
+
     const span=document.createElement("span");
     span.className="move";
     span.dataset.nodeId=node.id;
-    span.textContent=((ply%2===0)?Math.floor(ply/2)+1+". ":"")+figSAN(node.san)+" ";
-    span.onclick=e=>{
+    span.textContent=((ply%2===0)?(Math.floor(ply/2)+1)+". ":"")+figSAN(node.san)+" ";
+
+    span.addEventListener("click",(e)=>{
       e.stopPropagation();
       clearActive(); span.classList.add("active");
-      cursor=node; if(isOnMainline(node)) navNode=node;
+      cursor=node;
+      if(isOnMainline(node)) navNode=node;
       rebuildTo(node,true);
       showMoveMenu(e.pageX,e.pageY,node);
-    };
+    });
+
     container.appendChild(span);
 
     if(node.comment){
@@ -394,13 +406,42 @@ function renderLine(start,container,ply){
     node.variations.forEach(v=>{
       const vd=document.createElement("div");
       vd.className="variation";
-      renderLine({next:v},vd,ply);
+      renderVariation(v,vd,ply);
       container.appendChild(vd);
     });
 
     n=n.next; ply++;
   }
 }
+
+function renderVariation(vRoot,container,ply){
+  const node=vRoot;
+
+  const span=document.createElement("span");
+  span.className="move";
+  span.dataset.nodeId=node.id;
+  span.textContent=((ply%2===0)?(Math.floor(ply/2)+1)+". ":(Math.floor(ply/2)+1)+"... ")+figSAN(node.san)+" ";
+
+  span.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    clearActive(); span.classList.add("active");
+    cursor=node;
+    rebuildTo(node,true);
+    showMoveMenu(e.pageX,e.pageY,node);
+  });
+
+  container.appendChild(span);
+
+  if(node.comment){
+    const c=document.createElement("div");
+    c.className="commentRow";
+    c.textContent=node.comment;
+    container.appendChild(c);
+  }
+
+  renderLine(node,container,ply+1);
+}
+
 function renderAll(){
   movesDiv.innerHTML="";
   renderLine(root,movesDiv,0);
@@ -416,18 +457,21 @@ function showMoveMenu(x,y,node){
   if(node.parent && node.parent.variations.includes(node)){
     const up=document.createElement("button");
     up.textContent="⬆";
-    up.onclick=()=>{promote(node);hideTooltip();renderAll()};
+    up.title="Promote variation";
+    up.addEventListener("click",()=>{promote(node);hideTooltip();renderAll();});
     row.appendChild(up);
   }
 
   const plus=document.createElement("button");
   plus.textContent="➕";
-  plus.onclick=()=>showCommentEditor(x,y,node);
+  plus.title="Add/edit comment";
+  plus.addEventListener("click",()=>showCommentEditor(x,y,node));
   row.appendChild(plus);
 
   const del=document.createElement("button");
   del.textContent="🗑";
-  del.onclick=()=>{deleteNode(node);hideTooltip()};
+  del.title="Delete move/variation";
+  del.addEventListener("click",()=>{deleteNode(node);hideTooltip();});
   row.appendChild(del);
 
   showTooltip(x,y,row);
@@ -435,6 +479,7 @@ function showMoveMenu(x,y,node){
 
 function showCommentEditor(x,y,node){
   const box=document.createElement("div");
+
   const ta=document.createElement("textarea");
   ta.value=node.comment||"";
   box.appendChild(ta);
@@ -444,13 +489,15 @@ function showCommentEditor(x,y,node){
 
   const save=document.createElement("button");
   save.textContent="Save";
-  save.onclick=()=>{
+  save.addEventListener("click",()=>{
     node.comment=ta.value.replace(/\}/g,"").trim();
-    hideTooltip(); renderAll();
-  };
+    hideTooltip();
+    renderAll();
+  });
+
   const cancel=document.createElement("button");
   cancel.textContent="Cancel";
-  cancel.onclick=hideTooltip;
+  cancel.addEventListener("click",hideTooltip);
 
   row.appendChild(save);
   row.appendChild(cancel);
@@ -460,13 +507,13 @@ function showCommentEditor(x,y,node){
   setTimeout(()=>ta.focus(),0);
 }
 
-function showPromotionUI(x,y,cb){
+function showPromotionUI(x,y,onPick){
   const row=document.createElement("div");
   row.className="row";
   ["q","r","b","n"].forEach(p=>{
     const b=document.createElement("button");
     b.textContent=FIG[p.toUpperCase()];
-    b.onclick=()=>cb(p);
+    b.addEventListener("click",()=>onPick(p));
     row.appendChild(b);
   });
   showTooltip(x,y,row);
@@ -477,7 +524,9 @@ function deleteNode(n){
   const p=n.parent; if(!p)return;
   if(p.next===n) p.next=null;
   p.variations=p.variations.filter(v=>v!==n);
-  cursor=p; rebuildTo(p,true); renderAll();
+  cursor=p;
+  rebuildTo(p,true);
+  renderAll();
 }
 function promote(n){
   const p=n.parent;
@@ -487,38 +536,88 @@ function promote(n){
   p.next=n; n.parent=p;
 }
 
-/* ---------- move entry (PROMOTION CORRECT) ---------- */
+/* ---------- clipboard ---------- */
+function writeClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  const ta=document.createElement("textarea");
+  ta.value=text;
+  ta.style.position="fixed";
+  ta.style.left="-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+}
+copyPGN.addEventListener("click",(e)=>{e.stopPropagation();writeClipboard(pgnText.value);});
+copyFEN.addEventListener("click",(e)=>{e.stopPropagation();writeClipboard(chess.fen());});
+
+/* ---------- PROMOTION: reliable pending state ---------- */
+let pendingPromotion = null;
+
+/* ---------- move entry ---------- */
 function onDrop(from,to){
-  const piece=chess.get(from);
+  if(pendingPromotion) return "snapback";
 
-  const commit=(promotion)=>{
-    const test=new Chess(chess.fen());
-    const m=test.move({from,to,promotion});
-    if(!m){ board.position(chess.fen(),false); return; }
+  const piece = chess.get(from);
 
-    if(cursor.next&&cursor.next.san===m.san) cursor=cursor.next;
-    else{
-      const nn=new Node(m.san,cursor);
-      if(!cursor.next) cursor.next=nn;
-      else cursor.variations.push(nn);
-      cursor=nn;
+  const commitFrom = (fenBefore, cursorBefore, promotion) => {
+    const test = new Chess(fenBefore);
+    const m = test.move({from,to,promotion});
+    if(!m){
+      board.position(fenBefore, false);
+      return;
     }
-    rebuildTo(cursor,false);
-    if(isOnMainline(cursor)) navNode=cursor;
-    hideTooltip(); renderAll();
+
+    // commit into tree at the cursor state that existed when the drag started
+    cursor = cursorBefore;
+
+    if(cursor.next && cursor.next.san === m.san){
+      cursor = cursor.next;
+    } else {
+      const nn = new Node(m.san, cursor);
+      if(!cursor.next) cursor.next = nn;
+      else cursor.variations.push(nn);
+      cursor = nn;
+    }
+
+    rebuildTo(cursor, false);
+    if(isOnMainline(cursor)) navNode = cursor;
+
+    pendingPromotion = null;
+    hideTooltip();
+    renderAll();
   };
 
-  if(piece&&piece.type==="p"&&(to[1]==="8"||to[1]==="1")){
-    const guard=new Chess(chess.fen());
+  // Promotion candidate
+  if(piece && piece.type==="p" && (to[1]==="8" || to[1]==="1")){
+    const fenBefore = chess.fen();
+    const cursorBefore = cursor;
+
+    // guard legality
+    const guard = new Chess(fenBefore);
     if(!guard.move({from,to,promotion:"q"})) return "snapback";
-    const r=boardEl.getBoundingClientRect();
-    showPromotionUI(r.left+r.width/2,r.top+r.height/2,commit);
-    return;
+
+    pendingPromotion = { from, to, fenBefore, cursorBefore };
+
+    const r = boardEl.getBoundingClientRect();
+    showPromotionUI(
+      r.left + r.width/2,
+      r.top + r.height/2,
+      (p) => commitFrom(fenBefore, cursorBefore, p)
+    );
+
+    // IMPORTANT: snap back immediately; then we re-place after user picks
+    return "snapback";
   }
 
-  const test=new Chess(chess.fen());
-  if(!test.move({from,to,promotion:"q"})) return "snapback";
-  commit("q");
+  // Normal move
+  const fenBefore = chess.fen();
+  const test = new Chess(fenBefore);
+  const m = test.move({from,to,promotion:"q"});
+  if(!m) return "snapback";
+
+  // commit using the same pattern
+  commitFrom(fenBefore, cursor, "q");
 }
 
 /* ---------- init ---------- */
