@@ -71,8 +71,32 @@ body{
   background:#141820;
   border-bottom:1px solid #222;
   font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
 }
 .card .body{padding:12px}
+
+/* Tabs */
+.tabs{
+  display:flex;
+  gap:6px;
+}
+.tabBtn{
+  border:none;
+  background:#1f2430;
+  color:#ddd;
+  padding:6px 10px;
+  border-radius:999px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:13px;
+}
+.tabBtn.active{
+  background:#3a7afe;
+  color:#fff;
+}
 
 .moves{font-size:18px;line-height:2.1}
 .move{
@@ -143,13 +167,13 @@ body{
   cursor:pointer;
 }
 #tooltip textarea{
-  width:180px;
-  min-height:60px;
+  width:200px;
+  min-height:70px;
   background:#0f1115;
   color:#e6e6e6;
   border:1px solid #2a3150;
   border-radius:8px;
-  padding:6px;
+  padding:8px;
   font-size:14px;
 }
 </style>
@@ -177,19 +201,25 @@ body{
     </div>
 
     <!-- RIGHT -->
-    <div>
-      <div class="card">
-        <div class="head">Moves</div>
-        <div class="body"><div class="moves" id="moves"></div></div>
+    <div class="card">
+      <div class="head">
+        <div id="rightTitle">Move list</div>
+        <div class="tabs">
+          <button id="tabMoves" class="tabBtn active" type="button">Move list</button>
+          <button id="tabPGN" class="tabBtn" type="button">PGN text</button>
+        </div>
       </div>
 
-      <div class="card" style="margin-top:12px">
-        <div class="head">PGN text</div>
-        <div class="body">
-          <textarea id="pgnText" class="pgnBox"></textarea>
+      <div class="body">
+        <div id="panelMoves">
+          <div class="moves" id="moves"></div>
+        </div>
+
+        <div id="panelPGN" style="display:none">
+          <textarea id="pgnText" class="pgnBox" spellcheck="false"></textarea>
           <div class="pgnActions">
-            <button id="copyPGN">Copy PGN</button>
-            <button id="copyFEN">Copy FEN</button>
+            <button id="copyPGN" type="button">Copy PGN</button>
+            <button id="copyFEN" type="button">Copy FEN</button>
           </div>
         </div>
       </div>
@@ -202,184 +232,123 @@ body{
 
 <script>
 (() => {
-const FIG={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
-const figSAN=s=>s.replace(/^[KQRBN]/,p=>FIG[p]||p).replace(/=([QRBN])/g,(_,p)=>"="+FIG[p]);
+const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
+const figSAN = (s) =>
+  s.replace(/^[KQRBN]/, p => FIG[p] || p)
+   .replace(/=([QRBN])/g, (_,p)=>"="+(FIG[p]||p));
 
 /* ---------- tree ---------- */
-let NODE_SEQ=1;
-class Node{
-  constructor(san,parent){
-    this.id="n"+NODE_SEQ++;
-    this.san=san;
-    this.comment="";
-    this.parent=parent;
-    this.next=null;
-    this.variations=[];
+let NODE_SEQ = 1;
+class Node {
+  constructor(san, parent){
+    this.id = "n" + (NODE_SEQ++);
+    this.san = san;
+    this.comment = "";
+    this.parent = parent;
+    this.next = null;
+    this.variations = [];
   }
 }
-const root=new Node(null,null);
-let cursor=root;
-let navNode=null;
+const root = new Node(null, null);
+let cursor = root;
+let navNode = null;
 
 /* ---------- DOM ---------- */
-const movesDiv=document.getElementById("moves");
-const pgnText=document.getElementById("pgnText");
-const boardEl=document.getElementById("board");
-const tooltip=document.getElementById("tooltip");
+const movesDiv = document.getElementById("moves");
+const pgnText  = document.getElementById("pgnText");
+const boardEl  = document.getElementById("board");
+const tooltip  = document.getElementById("tooltip");
 
 const btnStart = document.getElementById("btnStart");
 const btnPrev  = document.getElementById("btnPrev");
 const btnNext  = document.getElementById("btnNext");
 const btnEnd   = document.getElementById("btnEnd");
 
-const copyPGN = document.getElementById("copyPGN");
-const copyFEN = document.getElementById("copyFEN");
+const copyPGN  = document.getElementById("copyPGN");
+const copyFEN  = document.getElementById("copyFEN");
+
+const tabMoves = document.getElementById("tabMoves");
+const tabPGN   = document.getElementById("tabPGN");
+const panelMoves = document.getElementById("panelMoves");
+const panelPGN   = document.getElementById("panelPGN");
 
 /* ---------- chess ---------- */
-const chess=new Chess();
-const board=Chessboard("board",{
-  position:"start",
-  draggable:true,
-  pieceTheme:"https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+const chess = new Chess();
+const board = Chessboard("board", {
+  position: "start",
+  draggable: true,
+  pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
   onDrop
 });
 
-/* ---------- rebuild ---------- */
-function rebuildTo(n,animate=true){
-  chess.reset();
-  const chain=[];
-  while(n && n!==root){ chain.push(n); n=n.parent; }
-  chain.reverse().forEach(m=>chess.move(m.san));
-  board.position(chess.fen(),animate);
+/* ---------- tooltip mechanics ---------- */
+function hideTooltip(){
+  tooltip.style.display = "none";
+  tooltip.innerHTML = "";
+}
+// Close on outside click
+document.body.addEventListener("click", hideTooltip);
+// BUT allow clicking/typing inside tooltip without closing
+tooltip.addEventListener("mousedown", (e)=>e.stopPropagation());
+tooltip.addEventListener("click", (e)=>e.stopPropagation());
+
+function showTooltip(x,y,el){
+  tooltip.innerHTML = "";
+  tooltip.appendChild(el);
+  tooltip.style.left = x + "px";
+  tooltip.style.top  = y + "px";
+  tooltip.style.display = "block";
 }
 
-/* ---------- active highlight ---------- */
-function clearActive(){
-  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
+/* ---------- rebuild ---------- */
+function rebuildTo(n, animate=true){
+  chess.reset();
+  const chain = [];
+  while(n && n !== root){ chain.push(n); n = n.parent; }
+  chain.reverse().forEach(m => chess.move(m.san));
+  board.position(chess.fen(), animate);
 }
 
 /* ---------- PGN serialization ---------- */
-function serializeFrom(node,startPly){
-  let out=[], ply=startPly;
-  let n=node.next;
+function serializeFrom(node, startPly){
+  let out = [];
+  let ply = startPly;
+  let n = node.next;
+
   while(n){
-    const moveNo=Math.floor(ply/2)+1;
-    const isWhite=(ply%2===0);
+    const moveNo = Math.floor(ply/2) + 1;
+    const isWhite = (ply % 2 === 0);
+
     if(isWhite) out.push(`${moveNo}.`);
     out.push(n.san);
+
     if(n.comment) out.push(`{${n.comment}}`);
+
     n.variations.forEach(v=>{
       out.push(`(${serializeFrom({next:v}, ply+1)})`);
     });
-    n=n.next;
+
+    n = n.next;
     ply++;
   }
   return out.join(" ").trim();
 }
+
 function syncPGN(){
-  pgnText.value=(serializeFrom(root,0)+" *").trim();
+  if(!pgnText) return;
+  pgnText.value = (serializeFrom(root, 0) + " *").trim() + "\n";
 }
 
-/* ---------- tooltip helpers ---------- */
-function hideTooltip(){ tooltip.style.display="none"; tooltip.innerHTML=""; }
-document.body.addEventListener("click", hideTooltip);
-
-function showTooltip(x,y,el){
-  tooltip.innerHTML="";
-  tooltip.appendChild(el);
-  tooltip.style.left=x+"px";
-  tooltip.style.top=y+"px";
-  tooltip.style.display="block";
+/* ---------- UI: tabs ---------- */
+function setTab(which){
+  const movesOn = (which === "moves");
+  tabMoves.classList.toggle("active", movesOn);
+  tabPGN.classList.toggle("active", !movesOn);
+  panelMoves.style.display = movesOn ? "block" : "none";
+  panelPGN.style.display   = movesOn ? "none"  : "block";
 }
-
-function showMoveMenu(x,y,node){
-  const row=document.createElement("div");
-  row.className="row";
-
-  if(node.parent && node.parent.variations.includes(node)){
-    const up=document.createElement("button");
-    up.textContent="⬆";
-    up.onclick=(e)=>{e.stopPropagation(); promote(node); hideTooltip(); renderAll();};
-    row.appendChild(up);
-  }
-
-  const plus=document.createElement("button");
-  plus.textContent="➕";
-  plus.onclick=(e)=>{e.stopPropagation(); showCommentEditor(x,y,node);};
-  row.appendChild(plus);
-
-  const del=document.createElement("button");
-  del.textContent="🗑";
-  del.onclick=(e)=>{e.stopPropagation(); deleteNode(node); hideTooltip();};
-  row.appendChild(del);
-
-  showTooltip(x,y,row);
-}
-
-function showCommentEditor(x,y,node){
-  const box=document.createElement("div");
-  const ta=document.createElement("textarea");
-  ta.value=node.comment||"";
-  box.appendChild(ta);
-
-  const row=document.createElement("div");
-  row.className="row";
-
-  const save=document.createElement("button");
-  save.textContent="Save";
-  save.onclick=(e)=>{
-    e.stopPropagation();
-    node.comment=ta.value.replace(/\}/g,"").trim();
-    hideTooltip();
-    renderAll();
-  };
-
-  const cancel=document.createElement("button");
-  cancel.textContent="Cancel";
-  cancel.onclick=(e)=>{e.stopPropagation(); hideTooltip();};
-
-  row.appendChild(save);
-  row.appendChild(cancel);
-  box.appendChild(row);
-
-  showTooltip(x,y,box);
-}
-
-function showPromotionUI(x,y,cb){
-  const row=document.createElement("div");
-  row.className="row";
-  ["q","r","b","n"].forEach(p=>{
-    const b=document.createElement("button");
-    b.textContent=FIG[p.toUpperCase()];
-    b.onclick=(e)=>{e.stopPropagation(); hideTooltip(); cb(p);};
-    row.appendChild(b);
-  });
-  showTooltip(x,y,row);
-}
-
-/* ---------- structure ops ---------- */
-function deleteNode(n){
-  if(!n || n===root) return;
-  const p=n.parent;
-  if(p.next===n) p.next=null;
-  p.variations=p.variations.filter(v=>v!==n);
-  cursor=p;
-  navNode = isOnMainline(p) ? p : null;
-  rebuildTo(p,true);
-  renderAll();
-}
-
-function promote(n){
-  const p=n.parent;
-  if(!p) return;
-  const idx=p.variations.indexOf(n);
-  if(idx<0) return;
-  p.variations.splice(idx,1);
-  const old=p.next;
-  if(old) p.variations.unshift(old);
-  p.next=n;
-  n.parent=p;
-}
+tabMoves.addEventListener("click", (e)=>{ e.stopPropagation(); setTab("moves"); });
+tabPGN.addEventListener("click", (e)=>{ e.stopPropagation(); setTab("pgn"); });
 
 /* ---------- mainline helpers ---------- */
 function mainlineNodes(){
@@ -388,50 +357,52 @@ function mainlineNodes(){
   while(n){ a.push(n); n=n.next; }
   return a;
 }
-function isOnMainline(n){
-  let cur=root.next;
-  while(cur){ if(cur===n) return true; cur=cur.next; }
+function isOnMainline(node){
+  let n=root.next;
+  while(n){ if(n===node) return true; n=n.next; }
   return false;
 }
 function updateNavButtons(){
-  const has = mainlineNodes().length>0;
+  const has = mainlineNodes().length > 0;
   [btnStart,btnPrev,btnNext,btnEnd].forEach(b => b.disabled = !has);
 }
 
 /* ---------- navigation ---------- */
 function goStart(){
-  navNode=null;
-  cursor=root;
-  rebuildTo(root,true);
+  navNode = null;
+  cursor = root;
+  rebuildTo(root, true);
   clearActive();
 }
 function goEnd(){
   const a=mainlineNodes();
   if(!a.length) return goStart();
-  navNode=a[a.length-1];
-  cursor=navNode;
-  rebuildTo(navNode,true);
+  navNode = a[a.length-1];
+  cursor = navNode;
+  rebuildTo(navNode, true);
+  highlightNode(navNode);
 }
 function goPrev(){
   const a=mainlineNodes();
-  if(!a.length) return;
-  if(!navNode) return;
+  if(!a.length || !navNode) return;
   const i=a.indexOf(navNode);
   if(i<=0) return goStart();
-  navNode=a[i-1];
-  cursor=navNode;
-  rebuildTo(navNode,true);
+  navNode = a[i-1];
+  cursor = navNode;
+  rebuildTo(navNode, true);
+  highlightNode(navNode);
 }
 function goNext(){
   const a=mainlineNodes();
   if(!a.length) return;
-  if(!navNode) navNode=a[0];
+  if(!navNode) navNode = a[0];
   else{
     const i=a.indexOf(navNode);
-    navNode=a[Math.min(a.length-1, i+1)];
+    navNode = a[Math.min(a.length-1, i+1)];
   }
-  cursor=navNode;
-  rebuildTo(navNode,true);
+  cursor = navNode;
+  rebuildTo(navNode, true);
+  highlightNode(navNode);
 }
 
 btnStart.addEventListener("click",(e)=>{e.stopPropagation(); hideTooltip(); goStart();});
@@ -439,58 +410,35 @@ btnPrev .addEventListener("click",(e)=>{e.stopPropagation(); hideTooltip(); goPr
 btnNext .addEventListener("click",(e)=>{e.stopPropagation(); hideTooltip(); goNext();});
 btnEnd  .addEventListener("click",(e)=>{e.stopPropagation(); hideTooltip(); goEnd();});
 
-/* ---------- rendering ---------- */
-function renderLine(start,container,ply){
-  let n=start.next;
-  while(n){
-    const node = n; // FIX: capture current node for handlers
-    const span=document.createElement("span");
-    span.className="move";
-    span.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:"")+figSAN(node.san)+" ";
-    span.addEventListener("click",(e)=>{
-      e.stopPropagation();
-      clearActive();
-      span.classList.add("active");
-      cursor=node;
-      if(isOnMainline(node)) navNode=node;
-      rebuildTo(node,true);
-      showMoveMenu(e.pageX,e.pageY,node);
-    });
-    container.appendChild(span);
-
-    if(node.comment){
-      const c=document.createElement("div");
-      c.className="commentRow";
-      c.textContent=node.comment;
-      container.appendChild(c);
-    }
-
-    node.variations.forEach(v=>{
-      const vNode = v; // FIX: capture
-      const vDiv=document.createElement("div");
-      vDiv.className="variation";
-      renderVariation(vNode,vDiv,ply);
-      container.appendChild(vDiv);
-    });
-
-    n=n.next;
-    ply++;
+/* ---------- move list rendering ---------- */
+function clearActive(){
+  document.querySelectorAll(".move").forEach(m=>m.classList.remove("active"));
+}
+function highlightNode(node){
+  if(!node) return;
+  const el = document.querySelector(`.move[data-node-id="${node.id}"]`);
+  if(el){
+    clearActive();
+    el.classList.add("active");
   }
 }
 
-function renderVariation(vRoot,container,ply){
-  const node = vRoot; // FIX: capture
+function renderVariation(vRoot, container, ply){
+  const node = vRoot;
+
   const span=document.createElement("span");
   span.className="move";
+  span.dataset.nodeId=node.id;
   span.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:`${Math.floor(ply/2)+1}... `)+figSAN(node.san)+" ";
+
   span.addEventListener("click",(e)=>{
     e.stopPropagation();
     clearActive();
     span.classList.add("active");
-    cursor=node;
-    // navNode should NOT change when selecting a variation
-    rebuildTo(node,true);
-    showMoveMenu(e.pageX,e.pageY,node);
+    cursor = node;
+    // do NOT change navNode when selecting a variation
+    rebuildTo(node, true);
+    showMoveMenu(e.pageX, e.pageY, node);
   });
   container.appendChild(span);
 
@@ -501,14 +449,155 @@ function renderVariation(vRoot,container,ply){
     container.appendChild(c);
   }
 
-  renderLine(node,container,ply+1);
+  renderLine(node, container, ply+1);
+}
+
+function renderLine(start, container, ply){
+  let n=start.next;
+  while(n){
+    const node = n; // capture
+
+    const span=document.createElement("span");
+    span.className="move";
+    span.dataset.nodeId=node.id;
+    span.textContent=((ply%2===0)?`${Math.floor(ply/2)+1}. `:"")+figSAN(node.san)+" ";
+
+    span.addEventListener("click",(e)=>{
+      e.stopPropagation();
+      clearActive();
+      span.classList.add("active");
+      cursor = node;
+      if(isOnMainline(node)) navNode = node;
+      rebuildTo(node, true);
+      showMoveMenu(e.pageX, e.pageY, node);
+    });
+
+    container.appendChild(span);
+
+    if(node.comment){
+      const c=document.createElement("div");
+      c.className="commentRow";
+      c.textContent=node.comment;
+      container.appendChild(c);
+    }
+
+    node.variations.forEach(v=>{
+      const vDiv=document.createElement("div");
+      vDiv.className="variation";
+      renderVariation(v, vDiv, ply);
+      container.appendChild(vDiv);
+    });
+
+    n = n.next;
+    ply++;
+  }
 }
 
 function renderAll(){
   movesDiv.innerHTML="";
-  renderLine(root,movesDiv,0);
+  renderLine(root, movesDiv, 0);
   syncPGN();
   updateNavButtons();
+}
+
+/* ---------- tooltip menus ---------- */
+function showMoveMenu(x,y,node){
+  const row=document.createElement("div");
+  row.className="row";
+
+  if(node.parent && node.parent.variations.includes(node)){
+    const up=document.createElement("button");
+    up.textContent="⬆";
+    up.title="Promote variation";
+    up.onclick=()=>{ promote(node); hideTooltip(); renderAll(); };
+    row.appendChild(up);
+  }
+
+  const plus=document.createElement("button");
+  plus.textContent="➕";
+  plus.title="Add/edit comment";
+  plus.onclick=()=>{ showCommentEditor(x,y,node); };
+  row.appendChild(plus);
+
+  const del=document.createElement("button");
+  del.textContent="🗑";
+  del.title="Delete move/variation";
+  del.onclick=()=>{ deleteNode(node); hideTooltip(); };
+  row.appendChild(del);
+
+  showTooltip(x,y,row);
+}
+
+function showCommentEditor(x,y,node){
+  const box=document.createElement("div");
+
+  const ta=document.createElement("textarea");
+  ta.value=node.comment||"";
+  box.appendChild(ta);
+
+  const row=document.createElement("div");
+  row.className="row";
+
+  const save=document.createElement("button");
+  save.textContent="Save";
+  save.onclick=()=>{
+    node.comment = ta.value.replace(/\}/g,"").trim();
+    hideTooltip();
+    renderAll();
+  };
+
+  const cancel=document.createElement("button");
+  cancel.textContent="Cancel";
+  cancel.onclick=()=>hideTooltip();
+
+  row.appendChild(save);
+  row.appendChild(cancel);
+  box.appendChild(row);
+
+  showTooltip(x,y,box);
+
+  // Focus reliably (after DOM paint)
+  setTimeout(()=>ta.focus(), 0);
+}
+
+function showPromotionUI(x,y,cb){
+  const row=document.createElement("div");
+  row.className="row";
+  ["q","r","b","n"].forEach(p=>{
+    const b=document.createElement("button");
+    b.textContent=FIG[p.toUpperCase()];
+    b.title = ({q:"Queen",r:"Rook",b:"Bishop",n:"Knight"}[p]);
+    b.onclick=()=>{ cb(p); };
+    row.appendChild(b);
+  });
+  showTooltip(x,y,row);
+}
+
+/* ---------- structure ops ---------- */
+function deleteNode(n){
+  if(!n || n===root) return;
+  const p = n.parent;
+  if(p.next === n) p.next = null;
+  p.variations = p.variations.filter(v=>v!==n);
+  cursor = p;
+  if(isOnMainline(p)) navNode = p;
+  else navNode = null;
+  rebuildTo(p, true);
+  renderAll();
+}
+
+function promote(n){
+  const p = n.parent;
+  if(!p) return;
+  const idx = p.variations.indexOf(n);
+  if(idx < 0) return;
+
+  p.variations.splice(idx, 1);
+  const old = p.next;
+  if(old) p.variations.unshift(old);
+
+  p.next = n;
+  n.parent = p;
 }
 
 /* ---------- clipboard ---------- */
@@ -523,52 +612,55 @@ function writeClipboard(text){
   document.execCommand("copy");
   document.body.removeChild(ta);
 }
-copyPGN.addEventListener("click",(e)=>{e.stopPropagation(); writeClipboard(pgnText.value);});
-copyFEN.addEventListener("click",(e)=>{e.stopPropagation(); writeClipboard(chess.fen());});
+if(copyPGN) copyPGN.addEventListener("click",(e)=>{e.stopPropagation(); writeClipboard(pgnText.value);});
+if(copyFEN) copyFEN.addEventListener("click",(e)=>{e.stopPropagation(); writeClipboard(chess.fen());});
 
-/* ---------- move entry (illegal snaps back + underpromotion tooltip) ---------- */
+/* ---------- move entry (PROMOTION FIXED) ---------- */
 function onDrop(from,to){
-  const piece=chess.get(from);
+  const piece = chess.get(from);
 
-  const tryMove=(promotion)=>{
-    const test=new Chess(chess.fen());
-    const m=test.move({from,to,promotion});
+  // commit AFTER legality confirmed
+  const commitMove = (promotion) => {
+    const test = new Chess(chess.fen());
+    const m = test.move({from,to,promotion});
     if(!m) return "snapback";
 
-    // Commit move into tree only after legality is confirmed
-    if(cursor.next && cursor.next.san===m.san){
-      cursor=cursor.next;
+    if(cursor.next && cursor.next.san === m.san){
+      cursor = cursor.next;
     }else{
-      const newNode=new Node(m.san,cursor);
-      if(!cursor.next) cursor.next=newNode;
+      const newNode = new Node(m.san, cursor);
+      if(!cursor.next) cursor.next = newNode;
       else cursor.variations.push(newNode);
-      cursor=newNode;
+      cursor = newNode;
     }
 
-    // rebuild from cursor to keep chess authoritative & in sync
-    rebuildTo(cursor,false);
+    // authoritative sync
+    rebuildTo(cursor, false);
+    if(isOnMainline(cursor)) navNode = cursor;
 
-    // keep navNode sensible if we’re on mainline
-    if(isOnMainline(cursor)) navNode=cursor;
-
+    hideTooltip();
     renderAll();
   };
 
-  // promotion candidate
-  if(piece && piece.type==="p" && (to[1]==="8" || to[1]==="1")){
-    // guard: if not even a queen-promo is legal, snap back immediately
-    const guard=new Chess(chess.fen());
+  // Promotion candidate: must be async choice -> snap back now, then commit after choice.
+  if(piece && piece.type === "p" && (to[1] === "8" || to[1] === "1")){
+    // Guard legality first (queen attempt)
+    const guard = new Chess(chess.fen());
     if(!guard.move({from,to,promotion:"q"})) return "snapback";
 
-    const r=boardEl.getBoundingClientRect();
-    showPromotionUI(r.left+r.width/2, r.top+r.height/2, tryMove);
-    return;
+    const r = boardEl.getBoundingClientRect();
+    showPromotionUI(r.left + r.width/2, r.top + r.height/2, (p) => commitMove(p));
+
+    // IMPORTANT: revert piece until user chooses
+    return "snapback";
   }
 
-  return tryMove("q");
+  // Normal move: validate + commit synchronously
+  return commitMove("q");
 }
 
 /* ---------- init ---------- */
+setTab("moves");     // Move list open by default
 renderAll();
 })();
 </script>
