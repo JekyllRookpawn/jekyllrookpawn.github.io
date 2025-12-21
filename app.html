@@ -39,11 +39,7 @@ body{
 #board{width:min(92vw,560px);margin:0 auto}
 
 /* controls */
-.controls{
-  display:flex;
-  gap:6px;
-  margin-top:8px;
-}
+.controls{display:flex;gap:6px;margin-top:8px}
 .controls button{
   flex:1;
   padding:10px;
@@ -91,6 +87,30 @@ body{
   color:#fff;
 }
 
+/* inline PGN comment */
+.comment{
+  margin-left:6px;
+  font-size:14px;
+  font-style:italic;
+  color:#cfd6ff;
+}
+
+/* inline editor */
+.editor{
+  margin:6px 0 10px 26px;
+}
+.editor textarea{
+  width:100%;
+  min-height:60px;
+  resize:vertical;
+  padding:8px;
+  background:#0e1322;
+  border:1px solid #2a3350;
+  border-radius:8px;
+  color:#e6e6e6;
+}
+
+/* variations */
 .variation{
   margin-left:26px;
   padding-left:10px;
@@ -166,7 +186,6 @@ body{
 (() => {
 
 const movesDiv = document.getElementById("moves");
-
 const FIG={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
 const figSAN=s=>s.replace(/^[KQRBN]/,p=>FIG[p]||p);
 
@@ -179,6 +198,7 @@ class Node{
     this.fen=fen;
     this.next=null;
     this.vars=[];
+    this.comment="";
   }
 }
 
@@ -246,6 +266,8 @@ function applyMove(san,fen){
 }
 
 /* rendering */
+let editingNode=null;
+
 function render(){
   movesDiv.innerHTML="";
   renderMain(root,1,movesDiv);
@@ -253,7 +275,6 @@ function render(){
 
 function renderMain(start,moveNo,wrap){
   let n=start.next;
-
   while(n){
     const row=document.createElement("div");
     row.className="fullmove";
@@ -341,20 +362,67 @@ function makeHalf(node){
   span.textContent=figSAN(node.san);
   span.onclick=()=>{
     cursor=node;
+    editingNode=null;
     rebuildTo(node,true);
     render();
   };
-  return span;
+  span.ondblclick=()=>{
+    editingNode=node;
+    render();
+  };
+
+  const frag=document.createDocumentFragment();
+  frag.appendChild(span);
+
+  if(node.comment){
+    const c=document.createElement("span");
+    c.className="comment";
+    c.textContent="{ "+node.comment+" }";
+    frag.appendChild(c);
+  }
+
+  if(editingNode===node){
+    const ed=document.createElement("div");
+    ed.className="editor";
+    const ta=document.createElement("textarea");
+    ta.value=node.comment||"";
+    ta.onkeydown=e=>{
+      if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){
+        node.comment=ta.value.trim();
+        editingNode=null;
+        render();
+      }
+      if(e.key==="Escape"){
+        editingNode=null;
+        render();
+      }
+    };
+    ed.appendChild(ta);
+    frag.appendChild(ed);
+    setTimeout(()=>ta.focus(),0);
+  }
+
+  return frag;
 }
 
-/* navigation buttons */
-btnStart.onclick=()=>{cursor=root;rebuildTo(root,true);render();}
+/* keyboard shortcut */
+document.addEventListener("keydown",e=>{
+  if(e.key==="c"||e.key==="C"){
+    if(cursor!==root){
+      editingNode=cursor;
+      render();
+    }
+  }
+});
+
+/* navigation */
+btnStart.onclick=()=>{cursor=root;editingNode=null;rebuildTo(root,true);render();}
 btnEnd.onclick=()=>{
   let n=root;while(n.next)n=n.next;
-  cursor=n;rebuildTo(n,true);render();
+  cursor=n;editingNode=null;rebuildTo(n,true);render();
 };
-btnPrev.onclick=()=>{if(cursor.parent){cursor=cursor.parent;rebuildTo(cursor,true);render();}}
-btnNext.onclick=()=>{if(cursor.next){cursor=cursor.next;rebuildTo(cursor,true);render();}}
+btnPrev.onclick=()=>{if(cursor.parent){cursor=cursor.parent;editingNode=null;rebuildTo(cursor,true);render();}}
+btnNext.onclick=()=>{if(cursor.next){cursor=cursor.next;editingNode=null;rebuildTo(cursor,true);render();}}
 
 /* init */
 render();
