@@ -80,10 +80,8 @@ body{
   margin-left:26px;
   padding-left:10px;
   border-left:2px dashed #444;
-  opacity:.95;
 }
 
-/* COMMENTS DISTINCT */
 .commentRow{
   margin:6px 0 10px 18px;
   padding:6px 10px;
@@ -93,30 +91,7 @@ body{
   color:#cfd6ff;
   font-size:14px;
   font-style:italic;
-  line-height:1.6;
 }
-
-/* promotion popup */
-#pop{
-  position:fixed;
-  z-index:9999;
-  background:#0b0f18;
-  border:1px solid #2a3350;
-  border-radius:12px;
-  padding:8px;
-  display:none;
-}
-#pop .row{display:flex;gap:8px}
-#pop button{
-  width:44px;height:44px;
-  border-radius:10px;
-  border:none;
-  background:#1f2430;
-  color:#e6e6e6;
-  font-size:22px;
-  cursor:pointer;
-}
-#pop button:hover{background:#2a3150}
 </style>
 </head>
 
@@ -132,10 +107,10 @@ body{
     <div>
       <div id="board"></div>
       <div class="controls">
-        <button id="btnStart" type="button">⏮</button>
-        <button id="btnPrev"  type="button">◀</button>
-        <button id="btnNext"  type="button">▶</button>
-        <button id="btnEnd"   type="button">⏭</button>
+        <button id="btnStart">⏮</button>
+        <button id="btnPrev">◀</button>
+        <button id="btnNext">▶</button>
+        <button id="btnEnd">⏭</button>
       </div>
     </div>
 
@@ -148,8 +123,6 @@ body{
   </div>
 </div>
 
-<div id="pop"></div>
-
 <script>
 (() => {
   const FIG={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
@@ -161,18 +134,14 @@ body{
       this.id="n"+ID++;
       this.san=san;
       this.parent=parent;
-      this.next=null;   // mainline
-      this.vars=[];     // variation roots
+      this.next=null;
+      this.vars=[];
       this.comment="";
     }
   }
 
   const root=new Node(null,null);
-
-  // cursor = current node (root means start pos)
   let cursor=root;
-
-  // navNode = node on mainline OR null (start)
   let navNode=null;
 
   const chess=new Chess();
@@ -186,32 +155,20 @@ body{
   function rebuildTo(node,animate){
     chess.reset();
     if(node===root){
-      board.position("start", !!animate);
+      board.position("start",!!animate);
       return;
     }
     const chain=[];
     let n=node;
     while(n&&n!==root){chain.push(n);n=n.parent}
     chain.reverse().forEach(m=>chess.move(m.san));
-    board.position(chess.fen(), !!animate);
-  }
-
-  function mainlineArray(){
-    const a=[];
-    let n=root.next;
-    while(n){a.push(n);n=n.next}
-    return a;
-  }
-  function navIndex(){
-    if(!navNode) return -1;
-    const a=mainlineArray();
-    return a.indexOf(navNode);
+    board.position(chess.fen(),!!animate);
   }
 
   function addMove(san){
     if(cursor.next && cursor.next.san===san){
       cursor=cursor.next;
-      if(isOnMainline(cursor)) navNode=cursor;
+      navNode=cursor;
       return;
     }
     const v=cursor.vars.find(x=>x.san===san);
@@ -220,66 +177,18 @@ body{
     if(cursor.next) cursor.vars.push(n);
     else cursor.next=n;
     cursor=n;
-    if(isOnMainline(cursor)) navNode=cursor;
-  }
-
-  function isOnMainline(node){
-    let n=root.next;
-    while(n){ if(n===node) return true; n=n.next; }
-    return false;
-  }
-
-  /* PROMOTION (unchanged, confirmed working) */
-  const pop=document.getElementById("pop");
-  let pendingFen=null, pendingMove=null;
-
-  function openPromotion(from,to){
-    pop.innerHTML="";
-    const row=document.createElement("div");
-    row.className="row";
-    ["q","r","b","n"].forEach(p=>{
-      const b=document.createElement("button");
-      b.textContent=FIG[p.toUpperCase()];
-      b.onclick=()=>commitPromotion(p);
-      row.appendChild(b);
-    });
-    pop.appendChild(row);
-    const r=document.getElementById("board").getBoundingClientRect();
-    pop.style.left=(r.left+r.width/2)+"px";
-    pop.style.top=(r.top+r.height/2)+"px";
-    pop.style.transform="translate(-50%,-50%)";
-    pop.style.display="block";
-    pendingMove={from,to};
-  }
-
-  function commitPromotion(p){
-    chess.load(pendingFen);
-    const m=chess.move({from:pendingMove.from,to:pendingMove.to,promotion:p});
-    if(!m){pop.style.display="none";return}
-    addMove(m.san);
-    pop.style.display="none";
-    rebuildTo(cursor,false);
-    render();
+    navNode=cursor;
   }
 
   function onDrop(from,to){
-    pop.style.display="none";
     const test=new Chess(chess.fen());
-    const mQ=test.move({from,to,promotion:"q"});
-    if(!mQ) return "snapback";
-    if(mQ.flags.includes("p")){
-      pendingFen=chess.fen();
-      openPromotion(from,to);
-      return "snapback";
-    }
-    const m=chess.move({from,to,promotion:"q"});
+    const m=test.move({from,to,promotion:"q"});
     if(!m) return "snapback";
     addMove(m.san);
     rebuildTo(cursor,false);
     render();
   }
 
-  /* RENDER */
   const movesDiv=document.getElementById("moves");
 
   function render(){
@@ -294,8 +203,8 @@ body{
           e.stopPropagation();
           cursor=n;
           if(isOnMainline(n)) navNode=n;
-          rebuildTo(n,true);
           render();
+          requestAnimationFrame(()=>rebuildTo(n,true));
         };
         container.appendChild(span);
 
@@ -311,7 +220,7 @@ body{
             const d=document.createElement("div");
             d.className="variation";
             container.appendChild(d);
-            line({next:v}, ply+1, d);
+            line({next:v},ply+1,d);
           });
         }
 
@@ -319,87 +228,13 @@ body{
       }
     }
     line(root,0,movesDiv);
-    updateNavButtons();
   }
 
-  /* NAV BUTTONS + DISABLE STATES */
-  const btnStart=document.getElementById("btnStart");
-  const btnPrev=document.getElementById("btnPrev");
-  const btnNext=document.getElementById("btnNext");
-  const btnEnd=document.getElementById("btnEnd");
-
-  function updateNavButtons(){
-    const a=mainlineArray();
-    const i=navIndex();
-    const has=a.length>0;
-
-    btnStart.disabled = !has || i===-1;
-    btnPrev.disabled  = !has || i===-1;
-
-    btnNext.disabled  = !has || i===a.length-1;
-    btnEnd.disabled   = !has || i===a.length-1;
+  function isOnMainline(node){
+    let n=root.next;
+    while(n){ if(n===node) return true; n=n.next; }
+    return false;
   }
-
-  function goStart(){
-    navNode=null;
-    cursor=root;
-    rebuildTo(root,true);
-    render();
-  }
-
-  function goEnd(){
-    const a=mainlineArray();
-    if(!a.length) return goStart();
-    navNode=a[a.length-1];
-    cursor=navNode;
-    rebuildTo(cursor,true);
-    render();
-  }
-
-  function goPrev(){
-    const a=mainlineArray();
-    const i=navIndex();
-    if(i===-1) return;
-    if(i===0) return goStart();
-    navNode=a[i-1];
-    cursor=navNode;
-    rebuildTo(cursor,true);
-    render();
-  }
-
-  function goNext(){
-    const a=mainlineArray();
-    if(!a.length) return;
-    const i=navIndex();
-    if(i===-1){
-      navNode=a[0];
-    }else if(i<a.length-1){
-      navNode=a[i+1];
-    }else{
-      return;
-    }
-    cursor=navNode;
-    rebuildTo(cursor,true);
-    render();
-  }
-
-  btnStart.onclick=goStart;
-  btnPrev.onclick=goPrev;
-  btnNext.onclick=goNext;
-  btnEnd.onclick=goEnd;
-
-  /* KEYBOARD: call nav functions directly */
-  document.addEventListener("keydown",e=>{
-    const el=document.activeElement;
-    const typing=el && (el.tagName==="INPUT" || el.tagName==="TEXTAREA");
-    if(typing) return;
-    if(pop.style.display==="block") return;
-
-    if(e.key==="ArrowLeft"){ e.preventDefault(); goPrev(); }
-    else if(e.key==="ArrowRight"){ e.preventDefault(); goNext(); }
-    else if(e.key==="Home"){ e.preventDefault(); goStart(); }
-    else if(e.key==="End"){ e.preventDefault(); goEnd(); }
-  });
 
   render();
   rebuildTo(root,false);
