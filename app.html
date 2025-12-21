@@ -14,34 +14,159 @@
 
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#0f1115;color:#e6e6e6;font-family:system-ui}
+body{
+  margin:0;
+  background:#0f1115;
+  color:#e6e6e6;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+
+/* header */
+.top{
+  padding:10px 14px;
+  background:#171a21;
+  border-bottom:1px solid #222;
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.top img{width:22px;filter:invert(1)}
+
+/* layout */
 .wrap{padding:12px}
 .main{display:grid;grid-template-columns:1fr;gap:12px}
 @media(min-width:900px){.main{grid-template-columns:560px 1fr}}
 #board{width:min(92vw,560px);margin:0 auto}
 
+/* controls */
+.controls{
+  display:flex;
+  gap:6px;
+  margin-top:8px;
+}
+.controls button{
+  flex:1;
+  padding:10px;
+  border:none;
+  border-radius:10px;
+  background:#1f2430;
+  color:#ddd;
+  cursor:pointer;
+  font-size:15px;
+}
+
+/* cards */
+.card{
+  border:1px solid #222;
+  border-radius:12px;
+  overflow:hidden;
+}
+.cardHead{
+  padding:10px 12px;
+  background:#141820;
+  border-bottom:1px solid #222;
+  font-weight:700;
+}
+.cardBody{padding:12px}
+
+/* move list */
 .moves{font-size:18px;line-height:1.9}
-.fullmove{display:grid;grid-template-columns:3ch auto auto;column-gap:6px}
+
+.fullmove{
+  display:grid;
+  grid-template-columns:3ch auto auto;
+  column-gap:6px;
+  align-items:baseline;
+}
 .num{opacity:.65;text-align:right}
-.half{cursor:pointer;padding:2px 4px;border-radius:6px}
-.half.active{background:#3a7afe;color:#fff}
-.variation{margin-left:26px;padding-left:10px;border-left:2px dashed #444}
+
+.half{
+  cursor:pointer;
+  padding:2px 4px;
+  border-radius:6px;
+  white-space:nowrap;
+}
+.half.active{
+  background:#3a7afe;
+  color:#fff;
+}
+
+.variation{
+  margin-left:26px;
+  padding-left:10px;
+  border-left:2px dashed #444;
+}
+
+/* promotion chooser */
+#promo{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.6);
+  display:none;
+  align-items:center;
+  justify-content:center;
+}
+#promo .box{
+  background:#161a24;
+  padding:16px;
+  border-radius:12px;
+  display:flex;
+  gap:10px;
+}
+#promo button{
+  font-size:28px;
+  padding:10px 14px;
+  background:#1f2430;
+  border:none;
+  border-radius:10px;
+  color:#fff;
+  cursor:pointer;
+}
 </style>
 </head>
 
 <body>
 
+<div class="top">
+  <img src="https://jekyllchess.github.io/assets/favicon.png">
+  <div>JekyllChess PGN App</div>
+</div>
+
 <div class="wrap">
   <div class="main">
-    <div><div id="board"></div></div>
-    <div class="moves" id="moves"></div>
+    <div>
+      <div id="board"></div>
+      <div class="controls">
+        <button id="btnStart">⏮</button>
+        <button id="btnPrev">◀</button>
+        <button id="btnNext">▶</button>
+        <button id="btnEnd">⏭</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardHead">Move list</div>
+      <div class="cardBody">
+        <div id="moves" class="moves"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="promo">
+  <div class="box">
+    <button data-p="q">♕</button>
+    <button data-p="r">♖</button>
+    <button data-p="b">♗</button>
+    <button data-p="n">♘</button>
   </div>
 </div>
 
 <script>
 (() => {
 
-const moves=document.getElementById("moves");
+const movesDiv = document.getElementById("moves");
+
 const FIG={K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘"};
 const figSAN=s=>s.replace(/^[KQRBN]/,p=>FIG[p]||p);
 
@@ -58,9 +183,12 @@ class Node{
 }
 
 const chess=new Chess();
-const root=new Node(null,null,chess.fen());
+const START_FEN=chess.fen();
+const root=new Node(null,null,START_FEN);
 let cursor=root;
 
+/* board */
+let pendingPromotion=null;
 const board=Chessboard("board",{
   position:"start",
   draggable:true,
@@ -68,17 +196,39 @@ const board=Chessboard("board",{
   onDrop
 });
 
-function rebuildTo(node){
-  chess.load(node?.fen||root.fen);
-  board.position(chess.fen());
+function rebuildTo(node,animate){
+  chess.load(node?.fen||START_FEN);
+  board.position(chess.fen(),!!animate);
 }
 
+/* move input */
 function onDrop(from,to){
   const t=new Chess(chess.fen());
+  const piece=t.get(from);
+
+  if(piece?.type==="p"&&(to[1]==="8"||to[1]==="1")){
+    pendingPromotion={from,to};
+    promo.style.display="flex";
+    return;
+  }
+
   const m=t.move({from,to,promotion:"q"});
   if(!m) return "snapback";
   applyMove(m.san,t.fen());
 }
+
+promo.onclick=e=>{
+  if(!e.target.dataset.p) return;
+  promo.style.display="none";
+  const t=new Chess(chess.fen());
+  const m=t.move({
+    from:pendingPromotion.from,
+    to:pendingPromotion.to,
+    promotion:e.target.dataset.p
+  });
+  pendingPromotion=null;
+  if(m) applyMove(m.san,t.fen());
+};
 
 function applyMove(san,fen){
   let n;
@@ -91,17 +241,19 @@ function applyMove(san,fen){
   }
   n.fen=fen;
   cursor=n;
-  rebuildTo(n);
+  rebuildTo(n,false);
   render();
 }
 
+/* rendering */
 function render(){
-  moves.innerHTML="";
-  renderMain(root,1,moves);
+  movesDiv.innerHTML="";
+  renderMain(root,1,movesDiv);
 }
 
 function renderMain(start,moveNo,wrap){
   let n=start.next;
+
   while(n){
     const row=document.createElement("div");
     row.className="fullmove";
@@ -143,14 +295,12 @@ function renderVariations(node,moveNo,isWhite,wrap){
     const d=document.createElement("div");
     d.className="variation";
     wrap.appendChild(d);
-
     renderVariationLine(v,moveNo,isWhite,d);
   });
 }
 
 function renderVariationLine(start,moveNo,isWhite,wrap){
   let n=start;
-
   while(n){
     const row=document.createElement("div");
     row.className="fullmove";
@@ -169,9 +319,7 @@ function renderVariationLine(start,moveNo,isWhite,wrap){
       if(n.next){
         bCell.appendChild(makeHalf(n.next));
         n=n.next.next;
-      }else{
-        n=null;
-      }
+      }else n=null;
       row.appendChild(bCell);
     }else{
       row.appendChild(document.createElement("div"));
@@ -191,11 +339,26 @@ function makeHalf(node){
   const span=document.createElement("span");
   span.className="half"+(node===cursor?" active":"");
   span.textContent=figSAN(node.san);
-  span.onclick=()=>{cursor=node;rebuildTo(node);render();};
+  span.onclick=()=>{
+    cursor=node;
+    rebuildTo(node,true);
+    render();
+  };
   return span;
 }
 
+/* navigation buttons */
+btnStart.onclick=()=>{cursor=root;rebuildTo(root,true);render();}
+btnEnd.onclick=()=>{
+  let n=root;while(n.next)n=n.next;
+  cursor=n;rebuildTo(n,true);render();
+};
+btnPrev.onclick=()=>{if(cursor.parent){cursor=cursor.parent;rebuildTo(cursor,true);render();}}
+btnNext.onclick=()=>{if(cursor.next){cursor=cursor.next;rebuildTo(cursor,true);render();}}
+
+/* init */
 render();
+rebuildTo(root,false);
 
 })();
 </script>
