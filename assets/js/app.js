@@ -41,8 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
       this.san = san;
       this.parent = parent;
       this.fen = fen;
-      this.next = null;
-      this.vars = [];
+      this.next = null;   // mainline
+      this.vars = [];     // variations
     }
   }
 
@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const m = t.move({ from, to, promotion: "q" });
     if (!m) return "snapback";
 
-    applyMove(m.san, t.fen(), t.turn());
+    applyMove(m.san, t.fen());
   }
 
   promo.onclick = e => {
@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const m = t.move({ ...pendingPromotion, promotion: e.target.dataset.p });
     pendingPromotion = null;
 
-    if (m) applyMove(m.san, t.fen(), t.turn());
+    if (m) applyMove(m.san, t.fen());
   };
 
 
@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * INSERTION (MAINLINE + VARS)
    * ====================================================== */
 
-  function applyMove(san, fen, turnAfter) {
+  function applyMove(san, fen) {
     if (cursor.next && cursor.next.san === san) {
       cursor = cursor.next;
       rebuildTo(cursor, false);
@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   * RENDERING (CORRECT PGN)
+   * RENDERING (PGN-CORRECT ORDER)
    * ====================================================== */
 
   function render() {
@@ -180,7 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     while (cur) {
 
-      // Print move number if white
+      /* --- print current mainline move --- */
       if (s === "w") {
         container.appendChild(text(m + ".\u00A0"));
       }
@@ -188,7 +188,20 @@ document.addEventListener("DOMContentLoaded", () => {
       appendMove(container, cur);
       container.appendChild(text(" "));
 
-      // After mainline reply, print variations
+      /* --- look ahead to opponent reply --- */
+      const reply = cur.next;
+
+      /* --- advance side / move number temporarily --- */
+      const nextSide = s === "w" ? "b" : "w";
+      const nextMoveNo = s === "b" ? m + 1 : m;
+
+      /* --- if there is a reply, render it first --- */
+      if (reply && s === "w") {
+        appendMove(container, reply);
+        container.appendChild(text(" "));
+      }
+
+      /* --- NOW render variations branching here --- */
       if (cur.vars.length) {
         cur.vars.forEach(v => {
           const span = document.createElement("span");
@@ -197,20 +210,27 @@ document.addEventListener("DOMContentLoaded", () => {
           const prefix =
             s === "w"
               ? m + "...\u00A0"
-              : (m + 1) + ".\u00A0";
+              : m + ".\u00A0";
 
           span.appendChild(text("(" + prefix));
-          renderLine(v, span, s === "w" ? m : m + 1, s === "w" ? "b" : "w");
+          renderLine(v, span, m, nextSide);
           trim(span);
           span.appendChild(text(") "));
           container.appendChild(span);
         });
       }
 
-      // Advance
-      if (s === "b") m++;
-      s = s === "w" ? "b" : "w";
-      cur = cur.next;
+      /* --- move forward in mainline --- */
+      if (!reply) {
+        if (s === "b") m++;
+        s = nextSide;
+        cur = cur.next;
+      } else {
+        // reply already rendered, skip it
+        cur = reply.next;
+        m = nextMoveNo;
+        s = nextSide;
+      }
     }
   }
 
