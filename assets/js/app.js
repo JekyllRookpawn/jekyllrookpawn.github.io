@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnNext  = document.getElementById("btnNext");
   const btnFlip  = document.getElementById("btnFlip");
 
+  const boardEl  = document.getElementById("board");
+  const cardBody = movesDiv.closest(".cardBody");
+
 
   /* ======================================================
    *  SAN / FIGURINE HELPERS
@@ -81,19 +84,16 @@ document.addEventListener("DOMContentLoaded", () => {
    *  RESIZE OBSERVER + HEIGHT SYNC
    * ====================================================== */
 
-  const boardEl = document.getElementById("board");
-
-  function syncMovesHeightToBoard() {
+  function syncPanesHeight() {
     const h = boardEl.getBoundingClientRect().height;
-    if (h > 0) {
-      movesDiv.style.height = h + "px";
-      movesDiv.style.overflowY = "auto";
+    if (h > 0 && cardBody) {
+      cardBody.style.height = h + "px";
     }
   }
 
   const boardResizeObserver = new ResizeObserver(() => {
     board.resize();
-    syncMovesHeightToBoard();
+    syncPanesHeight();
   });
 
   boardResizeObserver.observe(boardEl);
@@ -151,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   *  MOVE LIST RENDERING (LINEAR, NBSP SAFE)
+   *  MOVE LIST RENDERING (LINEAR, NO BREAKS)
    * ====================================================== */
 
   function render() {
@@ -163,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     while (cur) {
       if (side === "w") {
-        // NOTE: non-breaking space after move number
+        // non-breaking space after move number
         movesDiv.appendChild(text(moveNo + ".\u00A0"));
       }
 
@@ -196,7 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   *  NAVIGATION CONTROLS (BUTTONS)
+   *  NAVIGATION CONTROLS (BUTTONS + KEYBOARD)
    * ====================================================== */
 
   function goStart() {
@@ -232,31 +232,14 @@ document.addEventListener("DOMContentLoaded", () => {
   btnPrev.onclick  = goPrev;
   btnNext.onclick  = goNext;
 
-
-  /* ======================================================
-   *  KEYBOARD NAVIGATION
-   * ====================================================== */
-
   document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
 
     switch (e.key) {
-      case "ArrowLeft":
-        e.preventDefault();
-        goPrev();
-        break;
-      case "ArrowRight":
-        e.preventDefault();
-        goNext();
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        goStart();
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        goEnd();
-        break;
+      case "ArrowLeft":  e.preventDefault(); goPrev();  break;
+      case "ArrowRight": e.preventDefault(); goNext();  break;
+      case "ArrowUp":    e.preventDefault(); goStart(); break;
+      case "ArrowDown":  e.preventDefault(); goEnd();   break;
     }
   });
 
@@ -283,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setTimeout(() => {
     board.resize();
-    syncMovesHeightToBoard();
+    syncPanesHeight();
   }, 0);
 
 });
