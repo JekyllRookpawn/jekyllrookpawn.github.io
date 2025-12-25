@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const m = t.move({ from, to, promotion: "q" });
     if (!m) return "snapback";
 
-    applyMove(m.san, t.fen());
+    applyMove(m.san, t.fen(), t.turn());
   }
 
   promo.onclick = e => {
@@ -134,15 +134,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const m = t.move({ ...pendingPromotion, promotion: e.target.dataset.p });
     pendingPromotion = null;
 
-    if (m) applyMove(m.san, t.fen());
+    if (m) applyMove(m.san, t.fen(), t.turn());
   };
 
 
   /* ======================================================
-   * INSERTION (MAINLINE + VARS)
+   * INSERTION (MAINLINE + VARS, FIXED)
    * ====================================================== */
 
-  function applyMove(san, fen) {
+  function applyMove(san, fen, turnAfterMove) {
+    // Follow existing mainline if identical
     if (cursor.next && cursor.next.san === san) {
       cursor = cursor.next;
       rebuildTo(cursor, false);
@@ -152,10 +153,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const n = new Node(san, cursor, fen);
 
-    if (!cursor.next) {
-      cursor.next = n;
+    // Determine correct attachment point
+    let attachPoint = cursor;
+
+    // If White just moved, variation belongs to previous Black move
+    if (turnAfterMove === "b" && cursor.parent) {
+      attachPoint = cursor.parent;
+    }
+
+    if (!attachPoint.next) {
+      attachPoint.next = n;
     } else {
-      cursor.vars.push(n);
+      attachPoint.vars.push(n);
     }
 
     cursor = n;
@@ -165,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   * RENDERING (PGN-CORRECT, BUG-FREE)
+   * RENDERING (PGN-CORRECT)
    * ====================================================== */
 
   function render() {
@@ -178,19 +187,19 @@ document.addEventListener("DOMContentLoaded", () => {
     let m = moveNo;
 
     while (cur) {
-      /* White move */
+      // White
       container.appendChild(text(m + ".\u00A0"));
       appendMove(container, cur);
       container.appendChild(text(" "));
 
-      /* Black move */
       const black = cur.next;
       if (!black) return;
 
+      // Black
       appendMove(container, black);
       container.appendChild(text(" "));
 
-      /* Variations branching from this ply (after black reply) */
+      // Variations branching from this ply
       if (cur.vars.length) {
         cur.vars.forEach(v => {
           const span = document.createElement("span");
