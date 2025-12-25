@@ -1,5 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
 
+  /* ======================================================
+   * DOM REFERENCES
+   * ====================================================== */
+
   const movesDiv = document.getElementById("moves");
   const promo = document.getElementById("promo");
 
@@ -14,6 +18,11 @@ document.addEventListener("DOMContentLoaded", () => {
     s.replace(/^[KQRBN]/, p => FIG[p] || p)
      .replace(/=([QRBN])/, (_, p) => "=" + FIG[p]);
 
+
+  /* ======================================================
+   * TREE MODEL
+   * ====================================================== */
+
   let ID = 1;
   class Node {
     constructor(san, parent, fen) {
@@ -21,18 +30,29 @@ document.addEventListener("DOMContentLoaded", () => {
       this.san = san;
       this.parent = parent;
       this.fen = fen;
-      this.next = null;
-      this.vars = [];
+      this.next = null;   // mainline continuation
+      this.vars = [];     // alternative continuations
     }
   }
 
+
+  /* ======================================================
+   * CHESS STATE
+   * ====================================================== */
+
   const chess = new Chess();
   const START_FEN = chess.fen();
+
   const root = new Node(null, null, START_FEN);
   let cursor = root;
 
   let pendingPromotion = null;
   let boardOrientation = localStorage.getItem("boardOrientation") || "white";
+
+
+  /* ======================================================
+   * BOARD
+   * ====================================================== */
 
   const board = Chessboard("board", {
     position: "start",
@@ -48,6 +68,11 @@ document.addEventListener("DOMContentLoaded", () => {
     board.position(chess.fen(), !!animate);
   }
 
+
+  /* ======================================================
+   * MOVE INPUT + PROMOTION
+   * ====================================================== */
+
   function onDrop(from, to) {
     const t = new Chess(chess.fen());
     const p = t.get(from);
@@ -60,19 +85,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const m = t.move({ from, to, promotion: "q" });
     if (!m) return "snapback";
+
     applyMove(m.san, t.fen());
   }
 
   promo.onclick = e => {
     if (!e.target.dataset.p) return;
     promo.style.display = "none";
+
     const t = new Chess(chess.fen());
     const m = t.move({ ...pendingPromotion, promotion: e.target.dataset.p });
     pendingPromotion = null;
+
     if (m) applyMove(m.san, t.fen());
   };
 
+
+  /* ======================================================
+   * INSERTION (mainline vs variation)
+   * ====================================================== */
+
   function applyMove(san, fen) {
+    // Follow existing mainline move if identical
     if (cursor.next && cursor.next.san === san) {
       cursor = cursor.next;
       rebuildTo(cursor, false);
@@ -81,6 +115,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const n = new Node(san, cursor, fen);
+
+    // If at tip -> extend mainline, else -> create variation
     if (!cursor.next) cursor.next = n;
     else cursor.vars.push(n);
 
@@ -89,81 +125,113 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   }
 
-  function getMoveNumber(node) {
-    let n = node;
-    let count = 0;
-    while (n.parent) {
-      if (n.parent.parent) count++;
-      n = n.parent;
-    }
-    return count + 1;
-  }
+
+  /* ======================================================
+   * RENDERING (PGN-correct placement)
+   * ====================================================== */
 
   function render() {
     movesDiv.innerHTML = "";
-    renderMainline(root.next);
+    renderMainline();
   }
 
-  function renderMainline(w) {
-    let cur = w;
-    while (cur) {
-      const m = getMoveNumber(cur);
+  function renderMainline() {
+    let m = 1;
 
-      movesDiv.appendChild(text(m + ". "));
-      appendMove(cur);
+    // Pointers for current fullmove
+    let w = root.next;        // white move node of fullmove m
+    let bPrev = null;         // black node of previous fullmove (m-1)... used for white-side variations
+
+    while (w) {
+      // ---- White mainline ----
+      movesDiv.appendChild(text(m + ".\u00A0"));
+      appendMove(movesDiv, w);
       movesDiv.appendChild(text(" "));
 
-      if (cur.vars.length) {
-        cur.vars.forEach(v => renderVariation(v, m, "b"));
+      // ✅ White variations (start with WHITE) branch from previous black node
+      // Example: after 2...Nc6, alternatives for 3rd WHITE move live on that black node.
+      if (bPrev && bPrev.vars && bPrev.vars.length) {
+        for (const v of bPrev.vars) {
+          renderVarBlock(movesDiv, v, m, "w"); // prefix "m. "
+        }
       }
 
-      const b = cur.next;
+      const b = w.next;
       if (!b) return;
 
-      appendMove(b);
+      // ---- Black mainline (NO "m..." in mainline) ----
+      appendMove(movesDiv, b);
       movesDiv.appendChild(text(" "));
 
-      if (b.vars.length) {
-        b.vars.forEach(v => renderVariation(v, m, "w"));
+      // ✅ Black variations (start with BLACK) branch from the current white move
+      // Example: 1. e4 e5 (1... c5 ...)
+      if (w.vars && w.vars.length) {
+        for (const v of w.vars) {
+          renderVarBlock(movesDiv, v, m, "b"); // prefix "m... "
+        }
       }
 
-      cur = b.next;
+      // Advance to next fullmove
+      bPrev = b;
+      w = b.next;
+      m++;
     }
   }
 
-  function renderVariation(node, moveNo, startSide) {
+  function renderVarBlock(container, startNode, moveNo, startSide) {
     const span = document.createElement("span");
     span.className = "variation";
-    span.appendChild(text("(" + moveNo + (startSide === "b" ? "... " : ". ")));
 
-    let cur = node;
-    let side = startSide;
-    let m = moveNo;
+    const prefix = startSide === "w"
+      ? `${moveNo}.\u00A0`
+      : `${moveNo}...\u00A0`;
 
-    while (cur) {
-      if (side === "w") span.appendChild(text(m + ". "));
-      appendMove(cur, span);
-      span.appendChild(text(" "));
-      if (side === "b") m++;
-      side = side === "w" ? "b" : "w";
-      cur = cur.next;
-    }
-
+    span.appendChild(text("(" + prefix));
+    renderLine(span, startNode, moveNo, startSide, /*prefixAlreadyPrinted*/ true);
     trim(span);
     span.appendChild(text(") "));
-    movesDiv.appendChild(span);
+    container.appendChild(span);
   }
 
-  function appendMove(node, container = movesDiv) {
-    const s = document.createElement("span");
-    s.className = "move" + (node === cursor ? " active" : "");
-    s.textContent = figSAN(node.san);
-    s.onclick = () => {
+  // Render a linear line from node.next chain, starting at (moveNo, side).
+  // If prefixAlreadyPrinted=true, the first move number for that side is NOT printed again.
+  function renderLine(container, node, moveNo, side, prefixAlreadyPrinted) {
+    let cur = node;
+    let m = moveNo;
+    let s = side;
+    let first = true;
+
+    while (cur) {
+      // Print move number only for White moves, except when the variation prefix already printed it.
+      if (s === "w") {
+        if (!(first && prefixAlreadyPrinted)) {
+          container.appendChild(text(m + ".\u00A0"));
+        }
+      }
+
+      appendMove(container, cur);
+      container.appendChild(text(" "));
+
+      // advance
+      if (s === "b") m++;
+      s = (s === "w") ? "b" : "w";
+      first = false;
+      cur = cur.next;
+    }
+  }
+
+  function appendMove(container, node) {
+    const span = document.createElement("span");
+    span.className = "move" + (node === cursor ? " active" : "");
+    span.textContent = figSAN(node.san);
+
+    span.onclick = () => {
       cursor = node;
       rebuildTo(node, true);
       render();
     };
-    container.appendChild(s);
+
+    container.appendChild(span);
   }
 
   function trim(el) {
@@ -178,16 +246,47 @@ document.addEventListener("DOMContentLoaded", () => {
     return document.createTextNode(t);
   }
 
-  btnStart.onclick = () => { cursor = root; rebuildTo(root,true); render(); };
-  btnEnd.onclick   = () => { let n=root; while(n.next) n=n.next; cursor=n; rebuildTo(n,true); render(); };
-  btnPrev.onclick  = () => { if(cursor.parent){ cursor=cursor.parent; rebuildTo(cursor,true); render(); }};
-  btnNext.onclick  = () => { if(cursor.next){ cursor=cursor.next; rebuildTo(cursor,true); render(); }};
+
+  /* ======================================================
+   * NAVIGATION + KEYBOARD
+   * ====================================================== */
+
+  function goStart() { cursor = root; rebuildTo(root, true); render(); }
+  function goEnd()   { let n=root; while(n.next) n=n.next; cursor=n; rebuildTo(n,true); render(); }
+  function goPrev()  { if(cursor.parent){ cursor=cursor.parent; rebuildTo(cursor,true); render(); } }
+  function goNext()  { if(cursor.next){ cursor=cursor.next; rebuildTo(cursor,true); render(); } }
+
+  btnStart.onclick = goStart;
+  btnEnd.onclick   = goEnd;
+  btnPrev.onclick  = goPrev;
+  btnNext.onclick  = goNext;
+
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    switch (e.key) {
+      case "ArrowLeft":  e.preventDefault(); goPrev();  break;
+      case "ArrowRight": e.preventDefault(); goNext();  break;
+      case "ArrowUp":    e.preventDefault(); goStart(); break;
+      case "ArrowDown":  e.preventDefault(); goEnd();   break;
+    }
+  });
+
+
+  /* ======================================================
+   * ORIENTATION
+   * ====================================================== */
 
   btnFlip.onclick = () => {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.orientation(boardOrientation);
     localStorage.setItem("boardOrientation", boardOrientation);
   };
+
+
+  /* ======================================================
+   * INIT
+   * ====================================================== */
 
   render();
   rebuildTo(root, false);
