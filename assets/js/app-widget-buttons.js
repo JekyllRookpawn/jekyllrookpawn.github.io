@@ -8,29 +8,61 @@ document.addEventListener("DOMContentLoaded", () => {
   container.textContent = "";
 
   /* ======================================================
-   * BUTTON FACTORY
+   * BUTTON FACTORY + CHECKMARK
    * ====================================================== */
 
   function makeButton(label, title) {
+    const wrap = document.createElement("span");
+    wrap.style.position = "relative";
+    wrap.style.display = "inline-flex";
+    wrap.style.alignItems = "center";
+
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
     b.title = title;
-    return b;
+
+    const check = document.createElement("span");
+    check.textContent = "✓";
+    check.style.cssText = `
+      color: #3ddc84;
+      font-size: 16px;
+      margin-left: 6px;
+      opacity: 0;
+      transition: opacity .2s ease;
+    `;
+
+    wrap.appendChild(b);
+    wrap.appendChild(check);
+
+    return { wrap, button: b, check };
   }
 
-  const btnFen     = makeButton("📋", "Copy FEN");
-  const btnPgn     = makeButton("📄", "Copy PGN");
-  const btnComment = makeButton("➕", "Add comment");
-  const btnPromote = makeButton("⬆️", "Promote variation");
-  const btnDelete  = makeButton("🗑️", "Delete variation");
-  const btnUndo    = makeButton("↶", "Undo");
+  function showCheck(check) {
+    check.style.opacity = "1";
+    setTimeout(() => check.style.opacity = "0", 3000);
+  }
 
-  /* 🔑 HIDE variation-only buttons on load */
-  btnPromote.style.display = "none";
-  btnDelete.style.display  = "none";
+  const fenBtn     = makeButton("📋", "Copy FEN");
+  const pgnBtn     = makeButton("📄", "Copy PGN");
+  const commentBtn = makeButton("➕", "Add comment");
+  const promoteBtn = makeButton("⬆️", "Promote variation");
+  const deleteBtn  = makeButton("🗑️", "Delete variation");
+  const undoBtn    = makeButton("↶", "Undo");
 
-  container.append(btnFen, btnPgn, btnComment, btnPromote, btnDelete, btnUndo);
+  /* initial visibility */
+  promoteBtn.wrap.style.display = "none";
+  deleteBtn.wrap.style.display  = "none";
+  undoBtn.wrap.style.display    = "none";
+
+  container.append(
+    fenBtn.wrap,
+    pgnBtn.wrap,
+    commentBtn.wrap,
+    promoteBtn.wrap,
+    deleteBtn.wrap,
+    undoBtn.wrap
+  );
 
 
   /* ======================================================
@@ -100,12 +132,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setUndo(action) {
     undoAction = action;
-    btnUndo.disabled = false;
+    undoBtn.wrap.style.display = "";
   }
 
   function clearUndo() {
     undoAction = null;
-    btnUndo.disabled = true;
+    undoBtn.wrap.style.display = "none";
   }
 
 
@@ -114,18 +146,21 @@ document.addEventListener("DOMContentLoaded", () => {
    * ====================================================== */
 
   // COPY FEN
-  btnFen.onclick = () => {
+  fenBtn.button.onclick = () => {
     const n = getCursor();
-    if (n?.fen) copy(n.fen);
+    if (!n?.fen) return;
+    copy(n.fen);
+    showCheck(fenBtn.check);
   };
 
   // COPY PGN
-  btnPgn.onclick = () => {
+  pgnBtn.button.onclick = () => {
     copy(serializePGN());
+    showCheck(pgnBtn.check);
   };
 
   // ADD COMMENT
-  btnComment.onclick = () => {
+  commentBtn.button.onclick = () => {
     const n = getCursor();
     if (!n || n === window.JC.getRoot()) return;
 
@@ -140,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // PROMOTE VARIATION
-  btnPromote.onclick = () => {
+  promoteBtn.button.onclick = () => {
     const n = getCursor();
     if (!isVariation(n)) return;
 
@@ -164,7 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // DELETE VARIATION
-  btnDelete.onclick = () => {
+  deleteBtn.button.onclick = () => {
     const n = getCursor();
     if (!isVariation(n)) return;
 
@@ -184,17 +219,16 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // UNDO
-  btnUndo.onclick = () => {
+  undoBtn.button.onclick = () => {
     if (!undoAction) return;
 
     const a = undoAction;
 
     if (a.type === "promote") {
-      const { parent, promoted, previousMain } = a;
-      parent.next = previousMain;
-      parent.vars = parent.vars.filter(v => v !== previousMain);
-      parent.vars.unshift(promoted);
-      window.JC.setCursor(promoted.parent);
+      a.parent.next = a.previousMain;
+      a.parent.vars = a.parent.vars.filter(v => v !== a.previousMain);
+      a.parent.vars.unshift(a.promoted);
+      window.JC.setCursor(a.promoted.parent);
     }
 
     if (a.type === "delete") {
@@ -216,11 +250,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const n = getCursor();
     const isVar = isVariation(n);
 
-    /* show ONLY when variation is selected */
-    btnPromote.style.display = isVar ? "" : "none";
-    btnDelete.style.display  = isVar ? "" : "none";
-
-    btnComment.disabled = !n || n === window.JC.getRoot();
+    promoteBtn.wrap.style.display = isVar ? "" : "none";
+    deleteBtn.wrap.style.display  = isVar ? "" : "none";
   }
 
   document.addEventListener("click", e => {
@@ -229,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  clearUndo();
   updateStates();
+  clearUndo();
 
 });
