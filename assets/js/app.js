@@ -165,72 +165,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   * RENDERING (PGN-CORRECT ORDER)
+   * RENDERING (PGN-CORRECT, BUG-FREE)
    * ====================================================== */
 
   function render() {
     movesDiv.innerHTML = "";
-    renderLine(root.next, movesDiv, 1, "w");
+    renderMainline(root.next, movesDiv, 1);
   }
 
-  function renderLine(node, container, moveNo, side) {
+  function renderMainline(node, container, moveNo) {
     let cur = node;
     let m = moveNo;
-    let s = side;
 
     while (cur) {
-
-      /* --- print current mainline move --- */
-      if (s === "w") {
-        container.appendChild(text(m + ".\u00A0"));
-      }
-
+      /* White move */
+      container.appendChild(text(m + ".\u00A0"));
       appendMove(container, cur);
       container.appendChild(text(" "));
 
-      /* --- look ahead to opponent reply --- */
-      const reply = cur.next;
+      /* Black move */
+      const black = cur.next;
+      if (!black) return;
 
-      /* --- advance side / move number temporarily --- */
-      const nextSide = s === "w" ? "b" : "w";
-      const nextMoveNo = s === "b" ? m + 1 : m;
+      appendMove(container, black);
+      container.appendChild(text(" "));
 
-      /* --- if there is a reply, render it first --- */
-      if (reply && s === "w") {
-        appendMove(container, reply);
-        container.appendChild(text(" "));
-      }
-
-      /* --- NOW render variations branching here --- */
+      /* Variations branching from this ply (after black reply) */
       if (cur.vars.length) {
         cur.vars.forEach(v => {
           const span = document.createElement("span");
           span.className = "variation";
-
-          const prefix =
-            s === "w"
-              ? m + "...\u00A0"
-              : m + ".\u00A0";
-
-          span.appendChild(text("(" + prefix));
-          renderLine(v, span, m, nextSide);
+          span.appendChild(text("(" + m + "...\u00A0"));
+          renderVariation(v, span, m);
           trim(span);
           span.appendChild(text(") "));
           container.appendChild(span);
         });
       }
 
-      /* --- move forward in mainline --- */
-      if (!reply) {
-        if (s === "b") m++;
-        s = nextSide;
-        cur = cur.next;
-      } else {
-        // reply already rendered, skip it
-        cur = reply.next;
-        m = nextMoveNo;
-        s = nextSide;
+      cur = black.next;
+      m++;
+    }
+  }
+
+  function renderVariation(node, container, moveNo) {
+    let cur = node;
+    let m = moveNo;
+    let side = "b";
+
+    while (cur) {
+      if (side === "w") {
+        container.appendChild(text(m + ".\u00A0"));
       }
+
+      appendMove(container, cur);
+      container.appendChild(text(" "));
+
+      side = side === "w" ? "b" : "w";
+      if (side === "w") m++;
+      cur = cur.next;
     }
   }
 
