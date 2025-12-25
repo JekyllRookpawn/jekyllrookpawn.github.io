@@ -41,8 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
       this.san = san;
       this.parent = parent;
       this.fen = fen;
-      this.next = null;
-      this.vars = [];
+      this.next = null;   // mainline
+      this.vars = [];     // variations
     }
   }
 
@@ -177,19 +177,19 @@ document.addEventListener("DOMContentLoaded", () => {
     let m = moveNo;
 
     while (w) {
-      // White move
+      /* White mainline */
       container.appendChild(text(m + ".\u00A0"));
       appendMove(container, w);
       container.appendChild(text(" "));
 
-      // White variations (from parent black)
+      /* White variations (from parent black) */
       const parentBlack = w.parent;
       if (parentBlack && parentBlack.vars.length) {
         for (const v of parentBlack.vars) {
           const span = document.createElement("span");
           span.className = "variation";
-          span.appendChild(text("(" + m + ".\u00A0"));
-          renderVariation(v, span, m, "w", true);
+          span.appendChild(text("(" + m + "...\u00A0"));
+          renderVariation(v, span, m, "b");
           trim(span);
           span.appendChild(text(") "));
           container.appendChild(span);
@@ -199,18 +199,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const b = w.next;
       if (!b) return;
 
-      // Black move (with N...)
-      container.appendChild(text(m + "...\u00A0"));
+      /* Black mainline — NO move number */
       appendMove(container, b);
       container.appendChild(text(" "));
 
-      // Black variations (from white node)
+      /* Black variations (from white node) */
       if (w.vars.length) {
         for (const v of w.vars) {
           const span = document.createElement("span");
           span.className = "variation";
-          span.appendChild(text("(" + m + "...\u00A0"));
-          renderVariation(v, span, m, "b", true);
+          span.appendChild(text("(" + m + ".\u00A0"));
+          renderVariation(v, span, m, "w");
           trim(span);
           span.appendChild(text(") "));
           container.appendChild(span);
@@ -222,20 +221,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function renderVariation(node, container, moveNo, side, prefixPrinted) {
+  function renderVariation(node, container, moveNo, side) {
     let cur = node;
     let m = moveNo;
     let s = side;
 
     while (cur) {
-      if (s === "w" && !prefixPrinted) {
+      if (s === "w") {
         container.appendChild(text(m + ".\u00A0"));
       }
 
       appendMove(container, cur);
       container.appendChild(text(" "));
-
-      prefixPrinted = false;
 
       if (s === "b") m++;
       s = s === "w" ? "b" : "w";
