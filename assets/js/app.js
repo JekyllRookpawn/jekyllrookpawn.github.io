@@ -1,9 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  /* ======================================================
-   * DOM REFERENCES
-   * ====================================================== */
-
   const movesDiv = document.getElementById("moves");
   const promo = document.getElementById("promo");
 
@@ -13,25 +9,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnNext  = document.getElementById("btnNext");
   const btnFlip  = document.getElementById("btnFlip");
 
-  const boardEl  = document.getElementById("board");
-  const card     = movesDiv.closest(".card");
-  const cardHead = card.querySelector(".cardHead");
-  const cardBody = card.querySelector(".cardBody");
-
-
-  /* ======================================================
-   * SAN / FIGURINES
-   * ====================================================== */
-
   const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
   const figSAN = s =>
     s.replace(/^[KQRBN]/, p => FIG[p] || p)
      .replace(/=([QRBN])/, (_, p) => "=" + FIG[p]);
-
-
-  /* ======================================================
-   * TREE MODEL
-   * ====================================================== */
 
   let ID = 1;
   class Node {
@@ -40,29 +21,18 @@ document.addEventListener("DOMContentLoaded", () => {
       this.san = san;
       this.parent = parent;
       this.fen = fen;
-      this.next = null;   // mainline
-      this.vars = [];     // variations branching here
+      this.next = null;
+      this.vars = [];
     }
   }
 
-
-  /* ======================================================
-   * CHESS STATE
-   * ====================================================== */
-
   const chess = new Chess();
   const START_FEN = chess.fen();
-
   const root = new Node(null, null, START_FEN);
   let cursor = root;
 
   let pendingPromotion = null;
   let boardOrientation = localStorage.getItem("boardOrientation") || "white";
-
-
-  /* ======================================================
-   * BOARD
-   * ====================================================== */
 
   const board = Chessboard("board", {
     position: "start",
@@ -78,11 +48,6 @@ document.addEventListener("DOMContentLoaded", () => {
     board.position(chess.fen(), !!animate);
   }
 
-
-  /* ======================================================
-   * MOVE INPUT
-   * ====================================================== */
-
   function onDrop(from, to) {
     const t = new Chess(chess.fen());
     const p = t.get(from);
@@ -95,7 +60,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const m = t.move({ from, to, promotion: "q" });
     if (!m) return "snapback";
-
     applyMove(m.san, t.fen());
   }
 
@@ -108,11 +72,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (m) applyMove(m.san, t.fen());
   };
 
-
-  /* ======================================================
-   * INSERTION (CORRECT & FINAL)
-   * ====================================================== */
-
   function applyMove(san, fen) {
     if (cursor.next && cursor.next.san === san) {
       cursor = cursor.next;
@@ -122,108 +81,89 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const n = new Node(san, cursor, fen);
-
-    if (!cursor.next) {
-      cursor.next = n;
-    } else {
-      cursor.vars.push(n);
-    }
+    if (!cursor.next) cursor.next = n;
+    else cursor.vars.push(n);
 
     cursor = n;
     rebuildTo(n, false);
     render();
   }
 
-
-  /* ======================================================
-   * RENDERING (PGN-CORRECT, FINAL)
-   * ====================================================== */
+  function getMoveNumber(node) {
+    let n = node;
+    let count = 0;
+    while (n.parent) {
+      if (n.parent.parent) count++;
+      n = n.parent;
+    }
+    return count + 1;
+  }
 
   function render() {
     movesDiv.innerHTML = "";
-    renderMainline(root.next, movesDiv, 1);
+    renderMainline(root.next);
   }
 
-  function renderMainline(w, container, moveNo) {
-    let m = moveNo;
+  function renderMainline(w) {
+    let cur = w;
+    while (cur) {
+      const m = getMoveNumber(cur);
 
-    while (w) {
-      /* White mainline */
-      container.appendChild(text(m + ".\u00A0"));
-      appendMove(container, w);
-      container.appendChild(text(" "));
+      movesDiv.appendChild(text(m + ". "));
+      appendMove(cur);
+      movesDiv.appendChild(text(" "));
 
-      /* Black variations after White move */
-      if (w.vars.length) {
-        for (const v of w.vars) {
-          renderVarBlock(container, v, m, "b");
-        }
+      if (cur.vars.length) {
+        cur.vars.forEach(v => renderVariation(v, m, "b"));
       }
 
-      const b = w.next;
+      const b = cur.next;
       if (!b) return;
 
-      /* Black mainline */
-      appendMove(container, b);
-      container.appendChild(text(" "));
+      appendMove(b);
+      movesDiv.appendChild(text(" "));
 
-      /* White variations after Black move */
       if (b.vars.length) {
-        for (const v of b.vars) {
-          renderVarBlock(container, v, m + 1, "w");
-        }
+        b.vars.forEach(v => renderVariation(v, m, "w"));
       }
 
-      w = b.next;
-      m++;
+      cur = b.next;
     }
   }
 
-  function renderVarBlock(container, node, moveNo, startSide) {
+  function renderVariation(node, moveNo, startSide) {
     const span = document.createElement("span");
     span.className = "variation";
+    span.appendChild(text("(" + moveNo + (startSide === "b" ? "... " : ". ")));
 
-    const prefix =
-      startSide === "w"
-        ? moveNo + ".\u00A0"
-        : (moveNo - 1) + "...\u00A0";
-
-    span.appendChild(text("(" + prefix));
-    renderVariation(node, span, moveNo, startSide);
-    trim(span);
-    span.appendChild(text(") "));
-    container.appendChild(span);
-  }
-
-  function renderVariation(node, container, moveNo, side) {
     let cur = node;
+    let side = startSide;
     let m = moveNo;
-    let s = side;
 
     while (cur) {
-      if (s === "w") {
-        container.appendChild(text(m + ".\u00A0"));
-      }
-
-      appendMove(container, cur);
-      container.appendChild(text(" "));
-
-      if (s === "b") m++;
-      s = s === "w" ? "b" : "w";
+      if (side === "w") span.appendChild(text(m + ". "));
+      appendMove(cur, span);
+      span.appendChild(text(" "));
+      if (side === "b") m++;
+      side = side === "w" ? "b" : "w";
       cur = cur.next;
     }
+
+    trim(span);
+    span.appendChild(text(") "));
+    movesDiv.appendChild(span);
   }
 
-  function appendMove(container, node) {
-    const span = document.createElement("span");
-    span.className = "move" + (node === cursor ? " active" : "");
-    span.textContent = figSAN(node.san);
-    span.onclick = () => {
+  function appendMove(node, container = movesDiv) {
+    const s = document.createElement("span");
+    s.className = "move" + (node === cursor ? " active" : "");
+    s.textContent = figSAN(node.san);
+    s.onclick = () => {
       cursor = node;
       rebuildTo(node, true);
       render();
     };
-    container.appendChild(span);
+    container.appendChild(s);
   }
 
   function trim(el) {
@@ -238,39 +178,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return document.createTextNode(t);
   }
 
-
-  /* ======================================================
-   * NAVIGATION
-   * ====================================================== */
-
-  btnStart.onclick = () => { cursor = root; rebuildTo(root, true); render(); };
+  btnStart.onclick = () => { cursor = root; rebuildTo(root,true); render(); };
   btnEnd.onclick   = () => { let n=root; while(n.next) n=n.next; cursor=n; rebuildTo(n,true); render(); };
   btnPrev.onclick  = () => { if(cursor.parent){ cursor=cursor.parent; rebuildTo(cursor,true); render(); }};
   btnNext.onclick  = () => { if(cursor.next){ cursor=cursor.next; rebuildTo(cursor,true); render(); }};
-
-  document.addEventListener("keydown", e => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    if (e.key === "ArrowLeft")  btnPrev.onclick();
-    if (e.key === "ArrowRight") btnNext.onclick();
-    if (e.key === "ArrowUp")    btnStart.onclick();
-    if (e.key === "ArrowDown")  btnEnd.onclick();
-  });
-
-
-  /* ======================================================
-   * ORIENTATION
-   * ====================================================== */
 
   btnFlip.onclick = () => {
     boardOrientation = boardOrientation === "white" ? "black" : "white";
     board.orientation(boardOrientation);
     localStorage.setItem("boardOrientation", boardOrientation);
   };
-
-
-  /* ======================================================
-   * INIT
-   * ====================================================== */
 
   render();
   rebuildTo(root, false);
