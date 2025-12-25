@@ -13,6 +13,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnNext  = document.getElementById("btnNext");
   const btnFlip  = document.getElementById("btnFlip");
 
+
+  /* ======================================================
+   * SAN / FIGURINES
+   * ====================================================== */
+
   const FIG = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘" };
   const figSAN = s =>
     s.replace(/^[KQRBN]/, p => FIG[p] || p)
@@ -102,11 +107,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   * INSERTION (mainline vs variation)
+   * INSERTION (MAINLINE vs VARIATION)
    * ====================================================== */
 
   function applyMove(san, fen) {
-    // Follow existing mainline move if identical
     if (cursor.next && cursor.next.san === san) {
       cursor = cursor.next;
       rebuildTo(cursor, false);
@@ -116,7 +120,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const n = new Node(san, cursor, fen);
 
-    // If at tip -> extend mainline, else -> create variation
     if (!cursor.next) cursor.next = n;
     else cursor.vars.push(n);
 
@@ -127,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ======================================================
-   * RENDERING (PGN-correct placement)
+   * RENDERING (FULL PGN-CORRECT)
    * ====================================================== */
 
   function render() {
@@ -138,40 +141,43 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderMainline() {
     let m = 1;
 
-    // Pointers for current fullmove
-    let w = root.next;        // white move node of fullmove m
-    let bPrev = null;         // black node of previous fullmove (m-1)... used for white-side variations
+    let w = root.next;   // white move of this fullmove
+    let bPrev = null;   // previous black move (for white variations)
 
     while (w) {
-      // ---- White mainline ----
+      let printedWhiteVariationThisMove = false;
+
+      /* ---- White mainline ---- */
       movesDiv.appendChild(text(m + ".\u00A0"));
       appendMove(movesDiv, w);
       movesDiv.appendChild(text(" "));
 
-      // ✅ White variations (start with WHITE) branch from previous black node
-      // Example: after 2...Nc6, alternatives for 3rd WHITE move live on that black node.
-      if (bPrev && bPrev.vars && bPrev.vars.length) {
+      /* ---- White-side variations (from previous black move) ---- */
+      if (bPrev && bPrev.vars.length) {
         for (const v of bPrev.vars) {
-          renderVarBlock(movesDiv, v, m, "w"); // prefix "m. "
+          renderVarBlock(movesDiv, v, m, "w");
+          printedWhiteVariationThisMove = true;
         }
       }
 
       const b = w.next;
       if (!b) return;
 
-      // ---- Black mainline (NO "m..." in mainline) ----
+      /* ---- Black mainline ---- */
+      if (printedWhiteVariationThisMove) {
+        movesDiv.appendChild(text(m + "...\u00A0"));
+      }
+
       appendMove(movesDiv, b);
       movesDiv.appendChild(text(" "));
 
-      // ✅ Black variations (start with BLACK) branch from the current white move
-      // Example: 1. e4 e5 (1... c5 ...)
-      if (w.vars && w.vars.length) {
+      /* ---- Black-side variations (from white move) ---- */
+      if (w.vars.length) {
         for (const v of w.vars) {
-          renderVarBlock(movesDiv, v, m, "b"); // prefix "m... "
+          renderVarBlock(movesDiv, v, m, "b");
         }
       }
 
-      // Advance to next fullmove
       bPrev = b;
       w = b.next;
       m++;
@@ -187,14 +193,12 @@ document.addEventListener("DOMContentLoaded", () => {
       : `${moveNo}...\u00A0`;
 
     span.appendChild(text("(" + prefix));
-    renderLine(span, startNode, moveNo, startSide, /*prefixAlreadyPrinted*/ true);
+    renderLine(span, startNode, moveNo, startSide, true);
     trim(span);
     span.appendChild(text(") "));
     container.appendChild(span);
   }
 
-  // Render a linear line from node.next chain, starting at (moveNo, side).
-  // If prefixAlreadyPrinted=true, the first move number for that side is NOT printed again.
   function renderLine(container, node, moveNo, side, prefixAlreadyPrinted) {
     let cur = node;
     let m = moveNo;
@@ -202,7 +206,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let first = true;
 
     while (cur) {
-      // Print move number only for White moves, except when the variation prefix already printed it.
       if (s === "w") {
         if (!(first && prefixAlreadyPrinted)) {
           container.appendChild(text(m + ".\u00A0"));
@@ -212,9 +215,8 @@ document.addEventListener("DOMContentLoaded", () => {
       appendMove(container, cur);
       container.appendChild(text(" "));
 
-      // advance
       if (s === "b") m++;
-      s = (s === "w") ? "b" : "w";
+      s = s === "w" ? "b" : "w";
       first = false;
       cur = cur.next;
     }
